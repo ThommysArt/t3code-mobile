@@ -6,6 +6,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 
 import "../global.css";
+import { StatusToastBridge } from "@/components/StatusToastBridge";
 import { EnvironmentProvider } from "@/runtime/EnvironmentProvider";
 
 export default function RootLayout() {
@@ -14,8 +15,18 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <HeroUINativeProvider>
+        <HeroUINativeProvider
+          config={{
+            toast: {
+              defaultProps: {
+                placement: "bottom",
+                isSwipeable: true,
+              },
+            },
+          }}
+        >
           <EnvironmentProvider>
+            <StatusToastBridge />
             <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
             <Stack screenOptions={{ headerShown: false }} />
           </EnvironmentProvider>

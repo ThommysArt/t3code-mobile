@@ -10,12 +10,20 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { newId } from "@/utils/id";
+import {
+  clearCachedThreadDetail,
+  loadCachedThreadDetail,
+  saveCachedThreadDetail,
+} from "./db";
 import { useEnvironments } from "./EnvironmentProvider";
+import { logStatus } from "./statusLog";
 
 interface ThreadState {
   readonly data: OrchestrationThread | null;
   readonly isPending: boolean;
   readonly error: string | null;
+  readonly isCached: boolean;
+  readonly cachedReceivedAt: string | null;
 }
 
 export interface OptimisticMessage extends OrchestrationMessage {
@@ -40,6 +48,8 @@ export function useThread(environmentIdRaw: string, threadIdRaw: string) {
     data: null,
     isPending: true,
     error: null,
+    isCached: false,
+    cachedReceivedAt: null,
   });
   const [optimisticMessages, setOptimisticMessages] = useState<readonly OptimisticMessage[]>([]);
   const [queuedSends, setQueuedSends] = useState<readonly QueuedSend[]>([]);
@@ -47,28 +57,101 @@ export function useThread(environmentIdRaw: string, threadIdRaw: string) {
   const [sendError, setSendError] = useState<string | null>(null);
   const targetKey = `${environmentId}:${threadId}`;
   const targetKeyRef = useRef(targetKey);
+  const snapshotSequenceRef = useRef(0);
+
+  const persistThread = useCallback(
+    (thread: OrchestrationThread, snapshotSequence: number) => {
+      snapshotSequenceRef.current = snapshotSequence;
+      void saveCachedThreadDetail(environmentId, threadId, thread, snapshotSequence).catch(
+        () => undefined
+      );
+    },
+    [environmentId, threadId]
+  );
 
   useEffect(() => {
     if (targetKeyRef.current !== targetKey) {
       targetKeyRef.current = targetKey;
-      setState({ data: null, isPending: true, error: null });
+      snapshotSequenceRef.current = 0;
+      setState({
+        data: null,
+        isPending: true,
+        error: null,
+        isCached: false,
+        cachedReceivedAt: null,
+      });
       setOptimisticMessages([]);
       setQueuedSends([]);
       setSendError(null);
     }
 
+    let cancelled = false;
     const client = getClient(environmentId);
+
+    void loadCachedThreadDetail(environmentId, threadId).then((cached) => {
+      if (cancelled) return;
+      if (!cached) {
+        if (!client) {
+          setState((current) => ({
+            ...current,
+            isPending: false,
+          }));
+        }
+        logStatus("thread", "info", "No cached thread", threadId, { environmentId });
+        return;
+      }
+
+      logStatus(
+        "thread",
+        "info",
+        "Loaded cached thread",
+        `${cached.thread.messages.length} messages`,
+        { environmentId }
+      );
+      snapshotSequenceRef.current = cached.snapshotSequence;
+      setState((current) => {
+        if (current.data !== null && !current.isCached) return current;
+        return {
+          data: cached.thread,
+          isPending: getClient(environmentId) !== null,
+          error: null,
+          isCached: true,
+          cachedReceivedAt: cached.snapshotReceivedAt,
+        };
+      });
+    });
+
     if (!client) {
-      setState((current) => ({ ...current, isPending: true }));
-      return;
+      return () => {
+        cancelled = true;
+      };
     }
 
-    setState((current) => ({ ...current, isPending: true, error: null }));
-    return client.orchestration.subscribeThread(
+    setState((current) => ({
+      ...current,
+      isPending: current.data === null,
+      error: null,
+    }));
+    logStatus("thread", "info", "Subscribing to thread", threadId, { environmentId });
+    const unsubscribe = client.orchestration.subscribeThread(
       { threadId },
       (item) => {
         if (item.kind === "snapshot") {
-          setState({ data: item.snapshot.thread, isPending: false, error: null });
+          logStatus(
+            "thread",
+            "success",
+            "Thread snapshot received",
+            `${item.snapshot.thread.messages.length} messages (seq ${item.snapshot.snapshotSequence})`,
+            { environmentId }
+          );
+          persistThread(item.snapshot.thread, item.snapshot.snapshotSequence);
+          setState({
+            data: item.snapshot.thread,
+            isPending: false,
+            error: null,
+            isCached: false,
+            cachedReceivedAt: null,
+          });
           setOptimisticMessages((current) =>
             current.filter(
               (optimistic) =>
@@ -82,19 +165,44 @@ export function useThread(environmentIdRaw: string, threadIdRaw: string) {
           if (!current.data) return current;
           const result = applyThreadDetailEvent(current.data, item.event);
           if (result.kind === "updated") {
-            return { data: result.thread, isPending: false, error: null };
+            persistThread(result.thread, snapshotSequenceRef.current);
+            return {
+              data: result.thread,
+              isPending: false,
+              error: null,
+              isCached: false,
+              cachedReceivedAt: null,
+            };
           }
           if (result.kind === "deleted") {
-            return { data: null, isPending: false, error: "Thread deleted." };
+            logStatus("thread", "warning", "Thread deleted", threadId, { environmentId });
+            void clearCachedThreadDetail(environmentId, threadId).catch(() => undefined);
+            return {
+              data: null,
+              isPending: false,
+              error: "Thread deleted.",
+              isCached: false,
+              cachedReceivedAt: null,
+            };
           }
           return current;
         });
       },
       {
-        onResubscribe: () => setState((current) => ({ ...current, isPending: true, error: null })),
+        onResubscribe: () =>
+          setState((current) => ({
+            ...current,
+            isPending: current.data === null,
+            error: null,
+          })),
       }
     );
-  }, [environment?.sessionRevision, environmentId, getClient, targetKey, threadId]);
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [environment?.sessionRevision, environmentId, getClient, persistThread, targetKey, threadId]);
 
   const messages = useMemo(() => {
     const confirmed = state.data?.messages ?? [];
@@ -186,6 +294,8 @@ export function useThread(environmentIdRaw: string, threadIdRaw: string) {
     thread: state.data,
     messages,
     isPending: state.isPending,
+    isCached: state.isCached,
+    cachedReceivedAt: state.cachedReceivedAt,
     error: state.error,
     sendError,
     sendMessage,

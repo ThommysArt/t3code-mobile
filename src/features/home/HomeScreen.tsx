@@ -3,7 +3,7 @@ import type {
   EnvironmentScopedThreadShell,
 } from "@t3tools/client-runtime";
 import { useRouter } from "expo-router";
-import { Button, Card, Chip, Input } from "heroui-native";
+import { Button, Card, Chip, Input, Menu } from "heroui-native";
 import { useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 
@@ -13,8 +13,14 @@ import { useEnvironments } from "@/runtime/EnvironmentProvider";
 import { relativeTime } from "@/utils/time";
 
 interface ProjectGroup {
-  readonly project: EnvironmentScopedProjectShell;
+  readonly key: string;
+  readonly project: EnvironmentScopedProjectShell | null;
+  readonly projectTitle: string;
   readonly threads: readonly EnvironmentScopedThreadShell[];
+}
+
+function scopedProjectKey(environmentId: string, projectId: string): string {
+  return `${environmentId}:${projectId}`;
 }
 
 function statusColor(
@@ -43,35 +49,77 @@ function statusLabel(thread: EnvironmentScopedThreadShell): string {
 
 export function HomeScreen() {
   const router = useRouter();
-  const { environments, isBootstrapping, projects, reconnect, threads } = useEnvironments();
+  const { environments, isBootstrapping, projects, reconnect, reloadThreads, threads } =
+    useEnvironments();
   const [search, setSearch] = useState("");
 
-  const groups = useMemo<readonly ProjectGroup[]>(() => {
+  const filteredThreads = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return projects
-      .map((project) => ({
-        project,
-        threads: threads.filter(
-          (thread) =>
-            thread.environmentId === project.environmentId &&
-            thread.projectId === project.id &&
-            (!query ||
-              thread.title.toLowerCase().includes(query) ||
-              project.title.toLowerCase().includes(query) ||
-              (thread.branch?.toLowerCase().includes(query) ?? false))
-        ),
-      }))
-      .filter((group) => group.threads.length > 0)
-      .sort((left, right) => {
-        const leftDate = left.threads[0]?.updatedAt ?? left.threads[0]?.createdAt ?? "";
-        const rightDate = right.threads[0]?.updatedAt ?? right.threads[0]?.createdAt ?? "";
-        return rightDate.localeCompare(leftDate);
-      });
+    if (!query) return threads;
+    return threads.filter(
+      (thread) =>
+        thread.title.toLowerCase().includes(query) ||
+        (thread.branch?.toLowerCase().includes(query) ?? false) ||
+        projects
+          .find(
+            (project) =>
+              project.environmentId === thread.environmentId && project.id === thread.projectId
+          )
+          ?.title.toLowerCase()
+          .includes(query)
+    );
   }, [projects, search, threads]);
+
+  const groups = useMemo<readonly ProjectGroup[]>(() => {
+    const projectByKey = new Map(
+      projects.map((project) => [scopedProjectKey(project.environmentId, project.id), project])
+    );
+    const threadsByProjectKey = new Map<string, EnvironmentScopedThreadShell[]>();
+
+    for (const thread of filteredThreads) {
+      const key = scopedProjectKey(thread.environmentId, thread.projectId);
+      const existing = threadsByProjectKey.get(key);
+      if (existing) {
+        existing.push(thread);
+      } else {
+        threadsByProjectKey.set(key, [thread]);
+      }
+    }
+
+    const nextGroups: ProjectGroup[] = [];
+    for (const [key, groupThreads] of threadsByProjectKey) {
+      const project = projectByKey.get(key) ?? null;
+      nextGroups.push({
+        key,
+        project,
+        projectTitle: project?.title ?? groupThreads[0]?.title ?? "Threads",
+        threads: groupThreads.sort((left, right) =>
+          (right.updatedAt ?? right.createdAt).localeCompare(left.updatedAt ?? left.createdAt)
+        ),
+      });
+    }
+
+    return nextGroups.sort((left, right) => {
+      const leftDate = left.threads[0]?.updatedAt ?? left.threads[0]?.createdAt ?? "";
+      const rightDate = right.threads[0]?.updatedAt ?? right.threads[0]?.createdAt ?? "";
+      return rightDate.localeCompare(leftDate);
+    });
+  }, [filteredThreads, projects]);
 
   const disconnected = environments.find(
     (environment) => environment.connectionState === "disconnected"
   );
+  const connecting = environments.find(
+    (environment) =>
+      environment.connectionState === "connecting" || environment.connectionState === "reconnecting"
+  );
+  const ready = environments.find((environment) => environment.connectionState === "ready");
+
+  const handleReconnectAll = () => {
+    for (const environment of environments) {
+      void reconnect(environment.connection.environmentId);
+    }
+  };
 
   return (
     <Screen>
@@ -82,9 +130,57 @@ export function HomeScreen() {
             Minimal
           </Text>
         </View>
-        <Button size="sm" variant="secondary" onPress={() => router.push("/connections")}>
-          Environments
-        </Button>
+        <Menu>
+          <Menu.Trigger asChild>
+            <Button size="sm" variant="secondary">
+              Menu
+            </Button>
+          </Menu.Trigger>
+          <Menu.Portal>
+            <Menu.Overlay />
+            <Menu.Content presentation="popover" width={260} placement="bottom" align="end">
+              <Menu.Item
+                className="items-start"
+                onPress={() => {
+                  router.push("/connections");
+                }}
+              >
+                <View className="flex-1">
+                  <Menu.ItemTitle>Environments</Menu.ItemTitle>
+                  <Menu.ItemDescription>Manage server connections</Menu.ItemDescription>
+                </View>
+              </Menu.Item>
+              {environments.length > 0 ? (
+                <Menu.Item
+                  className="items-start"
+                  onPress={() => {
+                    void reloadThreads();
+                  }}
+                >
+                  <View className="flex-1">
+                    <Menu.ItemTitle>Reload threads</Menu.ItemTitle>
+                    <Menu.ItemDescription>Fetch the latest shell snapshot</Menu.ItemDescription>
+                  </View>
+                </Menu.Item>
+              ) : null}
+              {connecting || disconnected ? (
+                <Menu.Item
+                  className="items-start"
+                  onPress={() => {
+                    handleReconnectAll();
+                  }}
+                >
+                  <View className="flex-1">
+                    <Menu.ItemTitle>Reconnect</Menu.ItemTitle>
+                    <Menu.ItemDescription>
+                      {ready?.connection.label ?? connecting?.connection.label ?? "Retry connection"}
+                    </Menu.ItemDescription>
+                  </View>
+                </Menu.Item>
+              ) : null}
+            </Menu.Content>
+          </Menu.Portal>
+        </Menu>
       </View>
 
       <View className="px-4 pb-2">
@@ -99,15 +195,37 @@ export function HomeScreen() {
       {disconnected ? (
         <ConnectionBanner
           title={`${disconnected.connection.label} is offline`}
-          detail={disconnected.error ?? "The environment connection was interrupted."}
+          detail={
+            disconnected.isCachedSnapshot
+              ? `Showing cached threads from ${relativeTime(disconnected.cachedSnapshotReceivedAt ?? "")}. ${disconnected.error ?? "Reconnect to refresh."}`
+              : (disconnected.error ?? "The environment connection was interrupted.")
+          }
           actionLabel="Reconnect"
           onAction={() => void reconnect(disconnected.connection.environmentId)}
+        />
+      ) : connecting ? (
+        <ConnectionBanner
+          title={
+            connecting.connectionState === "reconnecting"
+              ? `Reconnecting to ${connecting.connection.label}`
+              : `Connecting to ${connecting.connection.label}`
+          }
+          detail={
+            threads.length > 0
+              ? `Refreshing live data. Showing ${threads.length} cached thread${threads.length === 1 ? "" : "s"}.`
+              : "Waiting for the server shell snapshot with projects and threads."
+          }
+        />
+      ) : ready?.isCachedSnapshot ? (
+        <ConnectionBanner
+          title={`Connected to ${ready.connection.label}`}
+          detail={`Showing cached threads from ${relativeTime(ready.cachedSnapshotReceivedAt ?? "")}. Syncing live data.`}
         />
       ) : null}
 
       <ScrollView
         className="flex-1"
-        contentContainerClassName="gap-5 px-4 pb-10 pt-3"
+        contentContainerStyle={{ gap: 20, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 40 }}
         keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
       >
@@ -135,23 +253,34 @@ export function HomeScreen() {
               <Card.Description>
                 {search.trim()
                   ? "Try a project, branch, or thread name."
-                  : "Create a thread from another T3 Code client and it will appear here."}
+                  : connecting
+                    ? "The environment is connected but the shell snapshot has not arrived yet."
+                    : "Create a thread from another T3 Code client and it will appear here."}
               </Card.Description>
+              {!search.trim() ? (
+                <Text className="text-xs leading-5 text-muted">
+                  Debug: {projects.length} projects, {threads.length} threads, state{" "}
+                  {ready?.connectionState ??
+                    connecting?.connectionState ??
+                    disconnected?.connectionState ??
+                    "unknown"}
+                </Text>
+              ) : null}
             </Card.Body>
           </Card>
         ) : (
           groups.map((group) => (
-            <View key={`${group.project.environmentId}:${group.project.id}`} className="gap-2">
+            <View key={group.key} className="gap-2">
               <View className="flex-row items-center justify-between px-1">
                 <Text
                   className="flex-1 text-xs font-bold uppercase tracking-[1.5px] text-muted"
                   numberOfLines={1}
                 >
-                  {group.project.title}
+                  {group.projectTitle}
                 </Text>
                 <Text className="text-xs text-muted">{group.threads.length}</Text>
               </View>
-              <Card className="overflow-hidden p-0">
+              <View className="overflow-hidden rounded-2xl border border-divider bg-default-50">
                 {group.threads.map((thread, index) => (
                   <Pressable
                     key={`${thread.environmentId}:${thread.id}`}
@@ -194,7 +323,7 @@ export function HomeScreen() {
                     </View>
                   </Pressable>
                 ))}
-              </Card>
+              </View>
             </View>
           ))
         )}

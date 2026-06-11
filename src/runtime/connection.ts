@@ -7,7 +7,10 @@ import { resolveRemotePairingTarget, stripPairingTokenFromUrl } from "@t3tools/s
 import * as Effect from "effect/Effect";
 import { Platform } from "react-native";
 
+import { normalizeHostInput, normalizeHttpBaseUrl, normalizeWsBaseUrl } from "@/utils/network";
+
 import { effectRuntime } from "./effectRuntime";
+import { logStatus } from "./statusLog";
 
 export interface SavedConnection {
   readonly environmentId: EnvironmentId;
@@ -16,6 +19,7 @@ export interface SavedConnection {
   readonly httpBaseUrl: string;
   readonly wsBaseUrl: string;
   readonly bearerToken: string;
+  readonly pairingInput?: ConnectionInput;
 }
 
 function clientMetadata(): AuthClientPresentationMetadata {
@@ -32,20 +36,36 @@ export interface ConnectionInput {
   readonly pairingCode?: string;
 }
 
-export async function bootstrapConnection(input: ConnectionInput): Promise<SavedConnection> {
-  const target = resolveRemotePairingTarget({
+export function normalizeSavedConnection(connection: SavedConnection): SavedConnection {
+  return {
+    ...connection,
+    httpBaseUrl: normalizeHttpBaseUrl(connection.httpBaseUrl),
+    wsBaseUrl: normalizeWsBaseUrl(connection.wsBaseUrl),
+  };
+}
+
+function normalizeConnectionInput(input: ConnectionInput): ConnectionInput {
+  const host = input.host?.trim() ?? "";
+  return {
     pairingUrl: input.pairingUrl,
-    host: input.host,
     pairingCode: input.pairingCode,
-  });
+    ...(host ? { host: normalizeHostInput(host) } : {}),
+  };
+}
+
+export async function bootstrapConnection(input: ConnectionInput): Promise<SavedConnection> {
+  logStatus("environment", "info", "Bootstrapping connection", "Resolving pairing target");
+  const target = resolveRemotePairingTarget(normalizeConnectionInput(input));
+  const httpBaseUrl = normalizeHttpBaseUrl(target.httpBaseUrl);
+  const wsBaseUrl = normalizeWsBaseUrl(target.wsBaseUrl);
   const { descriptor, session } = await effectRuntime.runPromise(
     Effect.all(
       {
         descriptor: fetchRemoteEnvironmentDescriptor({
-          httpBaseUrl: target.httpBaseUrl,
+          httpBaseUrl,
         }),
         session: bootstrapRemoteBearerSession({
-          httpBaseUrl: target.httpBaseUrl,
+          httpBaseUrl,
           credential: target.credential,
           clientMetadata: clientMetadata(),
         }),
@@ -58,13 +78,46 @@ export async function bootstrapConnection(input: ConnectionInput): Promise<Saved
   const displayUrl =
     pairingUrl.length > 0
       ? stripPairingTokenFromUrl(new URL(pairingUrl)).toString()
-      : target.httpBaseUrl;
-  return {
+      : httpBaseUrl;
+  const savedConnection: SavedConnection = normalizeSavedConnection({
     environmentId: descriptor.environmentId,
     label: descriptor.label,
     displayUrl,
-    httpBaseUrl: target.httpBaseUrl,
-    wsBaseUrl: target.wsBaseUrl,
+    httpBaseUrl,
+    wsBaseUrl,
     bearerToken: session.access_token,
-  };
+    pairingInput: input,
+  });
+  logStatus(
+    "environment",
+    "success",
+    "Connection bootstrapped",
+    `${savedConnection.label} (${savedConnection.displayUrl})`,
+    { environmentId: savedConnection.environmentId }
+  );
+  return savedConnection;
+}
+
+export async function refreshSavedConnection(
+  savedConnection: SavedConnection
+): Promise<SavedConnection> {
+  if (!savedConnection.pairingInput) {
+    return savedConnection;
+  }
+
+  try {
+    logStatus("environment", "info", "Refreshing bearer token", savedConnection.label, {
+      environmentId: savedConnection.environmentId,
+    });
+    return await bootstrapConnection(savedConnection.pairingInput);
+  } catch (error) {
+    logStatus(
+      "environment",
+      "warning",
+      "Token refresh failed",
+      error instanceof Error ? error.message : "Using saved bearer token",
+      { environmentId: savedConnection.environmentId }
+    );
+    return savedConnection;
+  }
 }

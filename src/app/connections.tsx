@@ -241,6 +241,12 @@ export default function ConnectionsScreen() {
                   {environment.connectionState}
                 </Chip>
               </View>
+              <Text className="text-xs text-muted">
+                {environment.snapshot?.threads.filter((thread) => thread.archivedAt == null)
+                  .length ?? 0}{" "}
+                threads · {environment.snapshot?.projects.length ?? 0} projects
+                {environment.isCachedSnapshot ? " · cached" : ""}
+              </Text>
               {environment.error ? (
                 <Text className="text-sm leading-5 text-danger">{environment.error}</Text>
               ) : null}

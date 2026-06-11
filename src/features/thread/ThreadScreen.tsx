@@ -67,8 +67,18 @@ export function ThreadScreen() {
   const router = useRouter();
   const environmentId = firstParam(params.environmentId);
   const threadId = firstParam(params.threadId);
-  const { clearSendError, error, isPending, messages, sendError, sendMessage, shell, thread } =
-    useThread(environmentId, threadId);
+  const {
+    cachedReceivedAt,
+    clearSendError,
+    error,
+    isCached,
+    isPending,
+    messages,
+    sendError,
+    sendMessage,
+    shell,
+    thread,
+  } = useThread(environmentId, threadId);
   const [draft, setDraft] = useState("");
   const scrollRef = useRef<ScrollView>(null);
   const recentActivities = useMemo(
@@ -136,6 +146,12 @@ export function ThreadScreen() {
           onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
         >
           {error ? <ConnectionBanner title="Thread unavailable" detail={error} /> : null}
+          {isCached && cachedReceivedAt ? (
+            <ConnectionBanner
+              title="Showing cached history"
+              detail={`Last synced ${relativeTime(cachedReceivedAt)}. Reconnect to refresh live messages.`}
+            />
+          ) : null}
           {isPending && !thread ? (
             <Card>
               <Card.Body>

@@ -281,6 +281,25 @@ export const fetchRemoteEnvironmentDescriptor = Effect.fn(
   );
 });
 
+export const fetchRemoteOrchestrationSnapshot = Effect.fn(
+  "clientRuntime.remote.fetchRemoteOrchestrationSnapshot"
+)(function* (input: {
+  readonly httpBaseUrl: string;
+  readonly bearerToken: string;
+  readonly timeoutMs?: number;
+}) {
+  const client = yield* makeEnvironmentHttpApiClient(input.httpBaseUrl);
+  return yield* executeRemoteRequest(
+    remoteEndpointUrl(input.httpBaseUrl, "/api/orchestration/snapshot"),
+    input.timeoutMs ?? DEFAULT_REMOTE_REQUEST_TIMEOUT_MS,
+    client.orchestration.snapshot({
+      headers: {
+        authorization: `Bearer ${input.bearerToken}`,
+      },
+    })
+  );
+});
+
 export const issueRemoteWebSocketTicket = Effect.fn(
   "clientRuntime.remote.issueRemoteWebSocketTicket"
 )(function* (input: {

@@ -2,6 +2,7 @@ export * from "./knownEnvironment.ts";
 export * from "./scoped.ts";
 export * from "./shellTypes.ts";
 export * from "./shellSnapshotReducer.ts";
+export * from "./shellSnapshot.ts";
 export * from "./threadDetailReducer.ts";
 export * from "./gitActions.ts";
 export * from "./transportError.ts";
