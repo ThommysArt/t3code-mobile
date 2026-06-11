@@ -5,4 +5,6 @@ const config = getDefaultConfig(__dirname);
 
 module.exports = withUniwindConfig(config, {
   cssEntryFile: "./src/global.css",
+  dtsFile: "./uniwind-types.d.ts",
+  polyfills: { rem: 16 },
 });

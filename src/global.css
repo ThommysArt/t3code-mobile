@@ -1,8 +1,21 @@
 @import "tailwindcss";
 @import "uniwind";
-
 @import "heroui-native/styles";
+@import "heroui-native/styles/vibrant";
 
-/* End-user path: heroui-native lives in the project's node_modules, one
-   level up from this src/global.css file. */
-@source '../node_modules/heroui-native/lib';
+@source "../node_modules/heroui-native/lib";
+@source "./";
+
+@layer theme {
+  :root {
+    @variant light {
+      --color-brand: #7c3aed;
+      --color-brand-soft: #ede9fe;
+    }
+
+    @variant dark {
+      --color-brand: #a78bfa;
+      --color-brand-soft: #2e1065;
+    }
+  }
+}

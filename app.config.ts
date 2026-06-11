@@ -1,0 +1,63 @@
+import type { ExpoConfig } from "expo/config";
+
+const config: ExpoConfig = {
+  name: "T3 Code Mobile",
+  slug: "t3-code-mobile",
+  version: "0.1.0",
+  orientation: "portrait",
+  icon: "./assets/icon.png",
+  scheme: "t3code-mobile",
+  userInterfaceStyle: "automatic",
+  platforms: ["ios", "android"],
+  ios: {
+    supportsTablet: true,
+    bundleIdentifier: "com.t3tools.t3code.mobile",
+    infoPlist: {
+      NSAppTransportSecurity: {
+        NSAllowsArbitraryLoads: true,
+      },
+      NSLocalNetworkUsageDescription:
+        "Allow T3 Code Mobile to connect to T3 Code servers on your local network or tailnet.",
+      ITSAppUsesNonExemptEncryption: false,
+    },
+  },
+  android: {
+    package: "com.t3tools.t3code.mobile",
+    adaptiveIcon: {
+      foregroundImage: "./assets/icon.png",
+      backgroundColor: "#09090b",
+    },
+    predictiveBackGestureEnabled: false,
+  },
+  plugins: [
+    "expo-router",
+    "expo-secure-store",
+    [
+      "expo-camera",
+      {
+        cameraPermission:
+          "Allow T3 Code Mobile to access your camera so you can scan pairing QR codes.",
+        barcodeScannerEnabled: true,
+      },
+    ],
+    [
+      "expo-splash-screen",
+      {
+        image: "./assets/splash-icon.png",
+        imageWidth: 180,
+        resizeMode: "contain",
+        backgroundColor: "#fafafa",
+        dark: {
+          image: "./assets/splash-icon.png",
+          backgroundColor: "#09090b",
+        },
+      },
+    ],
+    "./plugins/withAndroidCleartextTraffic.cjs",
+  ],
+  experiments: {
+    typedRoutes: true,
+  },
+};
+
+export default config;

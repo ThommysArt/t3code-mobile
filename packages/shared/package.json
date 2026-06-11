@@ -1,0 +1,30 @@
+{
+  "name": "@t3tools/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./git": {
+      "types": "./src/git.ts",
+      "react-native": "./src/git.ts",
+      "import": "./src/git.ts",
+      "default": "./src/git.ts"
+    },
+    "./oauthScope": {
+      "types": "./src/oauthScope.ts",
+      "react-native": "./src/oauthScope.ts",
+      "import": "./src/oauthScope.ts",
+      "default": "./src/oauthScope.ts"
+    },
+    "./remote": {
+      "types": "./src/remote.ts",
+      "react-native": "./src/remote.ts",
+      "import": "./src/remote.ts",
+      "default": "./src/remote.ts"
+    }
+  },
+  "dependencies": {
+    "@t3tools/contracts": "workspace:*",
+    "effect": "4.0.0-beta.78"
+  }
+}
