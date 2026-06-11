@@ -19,6 +19,7 @@ import { Alert, Linking, ScrollView, Text, View } from "react-native";
 import { ConnectionBanner } from "@/components/ConnectionBanner";
 import { Screen } from "@/components/Screen";
 import { useEnvironments } from "@/runtime/EnvironmentProvider";
+import { logStatus } from "@/runtime/statusLog";
 import { useThread } from "@/runtime/useThread";
 import { useVcsStatus } from "@/runtime/useVcsStatus";
 import { newId } from "@/utils/id";
@@ -108,7 +109,15 @@ export function GitScreen() {
   const runAction = useCallback(
     async (input: GitActionRequestInput) => {
       const client = getClient(environmentId);
-      if (!client || !cwd || busy) return;
+      if (!client || !cwd || busy) {
+        if (!client) {
+          Alert.alert(
+            "Live connection required",
+            "Reconnect the environment before running source-control actions."
+          );
+        }
+        return;
+      }
       const branch = status?.refName;
       if (
         branch &&
@@ -119,6 +128,11 @@ export function GitScreen() {
       }
 
       setOperationLabel("Starting source-control action");
+      logStatus("git", "info", "Source-control action started", input.action, {
+        environmentId,
+        phase: "syncing",
+        inProgress: true,
+      });
       try {
         const result: GitRunStackedActionResult = await client.git.runStackedAction(
           {
@@ -131,6 +145,10 @@ export function GitScreen() {
           }
         );
         await git.refresh();
+        logStatus("git", "success", result.toast.title, result.toast.description, {
+          environmentId,
+          inProgress: false,
+        });
         const openPrCta = result.toast.cta.kind === "open_pr" ? result.toast.cta : null;
         Alert.alert(result.toast.title, result.toast.description, [
           ...(openPrCta
@@ -144,6 +162,13 @@ export function GitScreen() {
           { text: "Done" },
         ]);
       } catch (error) {
+        logStatus(
+          "git",
+          "danger",
+          "Source-control action failed",
+          error instanceof Error ? error.message : "The source-control action failed.",
+          { environmentId, phase: "error", inProgress: false }
+        );
         Alert.alert(
           "Git action failed",
           error instanceof Error ? error.message : "The source-control action failed."
@@ -163,7 +188,13 @@ export function GitScreen() {
     }
     if (quickAction.kind === "run_pull") {
       const client = getClient(environmentId);
-      if (!client || !cwd) return;
+      if (!client || !cwd) {
+        Alert.alert(
+          "Live connection required",
+          "Reconnect the environment before pulling repository changes."
+        );
+        return;
+      }
       setOperationLabel("Pulling latest changes");
       try {
         await client.vcs.pull({ cwd });

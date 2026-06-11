@@ -8,6 +8,7 @@ import {
   EnvironmentHttpCommonError,
 } from "@t3tools/contracts";
 import type {
+  ClientOrchestrationCommand,
   EnvironmentAuthInvalidError,
   EnvironmentInternalError,
   EnvironmentOperationForbiddenError,
@@ -297,6 +298,29 @@ export const fetchRemoteOrchestrationSnapshot = Effect.fn(
         authorization: `Bearer ${input.bearerToken}`,
       },
     })
+  );
+});
+
+export const dispatchRemoteOrchestrationCommand = Effect.fn(
+  "clientRuntime.remote.dispatchRemoteOrchestrationCommand"
+)(function* (input: {
+  readonly httpBaseUrl: string;
+  readonly bearerToken: string;
+  readonly command: ClientOrchestrationCommand;
+  readonly timeoutMs?: number;
+}) {
+  const client = yield* makeEnvironmentHttpApiClient(input.httpBaseUrl);
+  return yield* executeRemoteRequest(
+    remoteEndpointUrl(input.httpBaseUrl, "/api/orchestration/dispatch"),
+    input.timeoutMs ?? DEFAULT_REMOTE_REQUEST_TIMEOUT_MS,
+    client.orchestration.dispatch(
+      {
+        headers: {
+          authorization: `Bearer ${input.bearerToken}`,
+        },
+        payload: input.command,
+      } as never
+    )
   );
 });
 

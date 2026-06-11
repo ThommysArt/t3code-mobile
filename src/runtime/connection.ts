@@ -19,7 +19,6 @@ export interface SavedConnection {
   readonly httpBaseUrl: string;
   readonly wsBaseUrl: string;
   readonly bearerToken: string;
-  readonly pairingInput?: ConnectionInput;
 }
 
 function clientMetadata(): AuthClientPresentationMetadata {
@@ -76,9 +75,7 @@ export async function bootstrapConnection(input: ConnectionInput): Promise<Saved
 
   const pairingUrl = input.pairingUrl?.trim() ?? "";
   const displayUrl =
-    pairingUrl.length > 0
-      ? stripPairingTokenFromUrl(new URL(pairingUrl)).toString()
-      : httpBaseUrl;
+    pairingUrl.length > 0 ? stripPairingTokenFromUrl(new URL(pairingUrl)).toString() : httpBaseUrl;
   const savedConnection: SavedConnection = normalizeSavedConnection({
     environmentId: descriptor.environmentId,
     label: descriptor.label,
@@ -86,7 +83,6 @@ export async function bootstrapConnection(input: ConnectionInput): Promise<Saved
     httpBaseUrl,
     wsBaseUrl,
     bearerToken: session.access_token,
-    pairingInput: input,
   });
   logStatus(
     "environment",
@@ -96,28 +92,4 @@ export async function bootstrapConnection(input: ConnectionInput): Promise<Saved
     { environmentId: savedConnection.environmentId }
   );
   return savedConnection;
-}
-
-export async function refreshSavedConnection(
-  savedConnection: SavedConnection
-): Promise<SavedConnection> {
-  if (!savedConnection.pairingInput) {
-    return savedConnection;
-  }
-
-  try {
-    logStatus("environment", "info", "Refreshing bearer token", savedConnection.label, {
-      environmentId: savedConnection.environmentId,
-    });
-    return await bootstrapConnection(savedConnection.pairingInput);
-  } catch (error) {
-    logStatus(
-      "environment",
-      "warning",
-      "Token refresh failed",
-      error instanceof Error ? error.message : "Using saved bearer token",
-      { environmentId: savedConnection.environmentId }
-    );
-    return savedConnection;
-  }
 }

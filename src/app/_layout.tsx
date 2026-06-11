@@ -11,9 +11,10 @@ import { EnvironmentProvider } from "@/runtime/EnvironmentProvider";
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+  const backgroundColor = colorScheme === "dark" ? "#090909" : "#f4f4f5";
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor }}>
       <SafeAreaProvider>
         <HeroUINativeProvider
           config={{
@@ -28,7 +29,7 @@ export default function RootLayout() {
           <EnvironmentProvider>
             <StatusToastBridge />
             <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
-            <Stack screenOptions={{ headerShown: false }} />
+            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor } }} />
           </EnvironmentProvider>
         </HeroUINativeProvider>
       </SafeAreaProvider>

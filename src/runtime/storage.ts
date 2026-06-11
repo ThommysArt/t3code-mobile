@@ -1,6 +1,6 @@
 import * as SecureStore from "expo-secure-store";
 
-import { normalizeSavedConnection, type ConnectionInput, type SavedConnection } from "./connection";
+import { normalizeSavedConnection, type SavedConnection } from "./connection";
 
 const CONNECTIONS_KEY = "t3code.minimal.connections";
 const PAIRING_DRAFT_KEY = "t3code.minimal.pairing-draft";
@@ -31,31 +31,12 @@ export async function savePairingDraft(draft: PairingDraft): Promise<void> {
   await SecureStore.setItemAsync(PAIRING_DRAFT_KEY, JSON.stringify(draft));
 }
 
-function pairingInputFromDraft(
-  draft: PairingDraft,
-  connection: SavedConnection
-): ConnectionInput | undefined {
-  const serverUrl = draft.serverUrl.trim();
-  const pairingCode = draft.pairingCode.trim();
-  if (serverUrl && pairingCode) {
-    return { host: serverUrl, pairingCode };
-  }
-  if (serverUrl) {
-    return { pairingUrl: serverUrl };
-  }
-  if (connection.displayUrl.trim()) {
-    return { pairingUrl: connection.displayUrl };
-  }
-  return undefined;
-}
-
 export async function loadConnections(): Promise<readonly SavedConnection[]> {
   const raw = await SecureStore.getItemAsync(CONNECTIONS_KEY);
   if (!raw) return [];
 
   try {
     const parsed = JSON.parse(raw) as { readonly connections?: readonly SavedConnection[] };
-    const draft = await loadPairingDraft();
     return (parsed.connections ?? [])
       .filter(
         (connection) =>
@@ -63,12 +44,7 @@ export async function loadConnections(): Promise<readonly SavedConnection[]> {
           Boolean(connection.httpBaseUrl) &&
           Boolean(connection.bearerToken)
       )
-      .map((connection) =>
-        normalizeSavedConnection({
-          ...connection,
-          pairingInput: connection.pairingInput ?? pairingInputFromDraft(draft, connection),
-        })
-      );
+      .map(normalizeSavedConnection);
   } catch {
     return [];
   }

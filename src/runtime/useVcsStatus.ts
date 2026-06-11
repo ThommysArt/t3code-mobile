@@ -39,7 +39,11 @@ export function useVcsStatus(environmentId: EnvironmentId, cwd: string | null) {
   useEffect(() => {
     const client = getClient(environmentId);
     if (!client || !cwd) {
-      setState({ data: null, isPending: false, error: null });
+      setState({
+        data: null,
+        isPending: false,
+        error: cwd ? "Source control requires a live WebSocket connection." : null,
+      });
       return;
     }
 

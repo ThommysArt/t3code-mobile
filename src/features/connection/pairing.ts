@@ -3,7 +3,7 @@ import { readHostedPairingRequest } from "@t3tools/shared/remote";
 const MOBILE_PAIRING_URL_PARAM = "pairingUrl";
 
 const PRIVATE_HOST_PATTERN =
-  /^(?:localhost|127(?:\.\d{1,3}){3}|(?:10|192\.168|172\.(?:1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}|[^./:]+\.local|[^./:]+\.ts\.net)(?::\d+)?(?:\/.*)?$/i;
+  /^(?:localhost|127(?:\.\d{1,3}){3}|100\.(?:6[4-9]|[78]\d|9\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}|(?:10|192\.168|172\.(?:1[6-9]|2\d|3[01]))\.\d{1,3}\.\d{1,3}|[^./:]+\.local|[^./:]+\.ts\.net)(?::\d+)?(?:\/.*)?$/i;
 
 export function normalizeHostInput(host: string): string {
   const trimmed = host.trim();

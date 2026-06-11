@@ -71,7 +71,9 @@ function StatusToastIcon({ event }: { readonly event: StatusEvent }) {
 
   if (event.phase === "connected" || event.level === "success") {
     return (
-      <Text style={{ color: successColor, fontSize: 18, fontWeight: "700", lineHeight: 20 }}>✓</Text>
+      <Text style={{ color: successColor, fontSize: 18, fontWeight: "700", lineHeight: 20 }}>
+        ✓
+      </Text>
     );
   }
 
@@ -83,7 +85,9 @@ function StatusToastIcon({ event }: { readonly event: StatusEvent }) {
 
   if (event.level === "warning" || event.phase === "disconnected") {
     return (
-      <Text style={{ color: warningColor, fontSize: 18, fontWeight: "700", lineHeight: 20 }}>!</Text>
+      <Text style={{ color: warningColor, fontSize: 18, fontWeight: "700", lineHeight: 20 }}>
+        !
+      </Text>
     );
   }
 

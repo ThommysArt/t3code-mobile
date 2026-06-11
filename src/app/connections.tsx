@@ -1,11 +1,22 @@
-import { CameraView, useCameraPermissions } from "expo-camera";
 import { EnvironmentId } from "@t3tools/contracts";
+import { CameraView, useCameraPermissions } from "expo-camera";
+import Constants, { ExecutionEnvironment } from "expo-constants";
 import { useRouter } from "expo-router";
-import { Button, Card, Chip, Input } from "heroui-native";
-import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, ScrollView, Text, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  useColorScheme,
+  View,
+} from "react-native";
 
+import { AppIcon } from "@/components/AppIcon";
 import { Screen } from "@/components/Screen";
+import { StatusLogPanel } from "@/components/StatusLogPanel";
 import {
   extractPairingUrlFromQrPayload,
   normalizeHostInput,
@@ -13,10 +24,45 @@ import {
 } from "@/features/connection/pairing";
 import { useEnvironments } from "@/runtime/EnvironmentProvider";
 import { loadPairingDraft, savePairingDraft } from "@/runtime/storage";
+import { relativeTime } from "@/utils/time";
+
+function connectionTone(state: string, dataSource: string, isDark: boolean) {
+  if (state === "ready")
+    return {
+      label: "Live",
+      color: isDark ? "#4ade80" : "#15803d",
+      background: isDark ? "#12301f" : "#dcfce7",
+    };
+  if (dataSource === "http")
+    return {
+      label: "HTTP sync",
+      color: isDark ? "#fbbf24" : "#b45309",
+      background: isDark ? "#3a280c" : "#fef3c7",
+    };
+  if (state === "connecting" || state === "reconnecting")
+    return {
+      label: "Connecting",
+      color: isDark ? "#93c5fd" : "#1d4ed8",
+      background: isDark ? "#172554" : "#dbeafe",
+    };
+  if (dataSource === "cache")
+    return {
+      label: "Cached",
+      color: isDark ? "#d4d4d4" : "#525252",
+      background: isDark ? "#282828" : "#e5e5e5",
+    };
+  return {
+    label: "Offline",
+    color: isDark ? "#fca5a5" : "#b91c1c",
+    background: isDark ? "#3a1717" : "#fee2e2",
+  };
+}
 
 export default function ConnectionsScreen() {
   const router = useRouter();
-  const { addConnection, environments, reconnect, removeConnection } = useEnvironments();
+  const isDark = useColorScheme() === "dark";
+  const { addConnection, environments, reconnect, reloadThreads, removeConnection } =
+    useEnvironments();
   const [serverUrl, setServerUrl] = useState("");
   const [pairingCode, setPairingCode] = useState("");
   const [isLoadingDraft, setIsLoadingDraft] = useState(true);
@@ -25,6 +71,14 @@ export default function ConnectionsScreen() {
   const [showScanner, setShowScanner] = useState(false);
   const [scannerLocked, setScannerLocked] = useState(false);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const scrollRef = useRef<ScrollView>(null);
+  const palette = isDark
+    ? { background: "#090909", surface: "#171717", input: "#101010", border: "#303030" }
+    : { background: "#f4f4f5", surface: "#ffffff", input: "#f8f8f9", border: "#dedee2" };
+  const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
+  const usesPlainHttp =
+    (serverUrl.trim() ? normalizeHostInput(serverUrl).startsWith("http://") : false) ||
+    environments.some((environment) => environment.connection.httpBaseUrl.startsWith("http://"));
 
   useEffect(() => {
     void loadPairingDraft()
@@ -45,9 +99,6 @@ export default function ConnectionsScreen() {
       setError(null);
       try {
         await savePairingDraft({ serverUrl: url, pairingCode: code });
-        setServerUrl(url);
-        setPairingCode(code);
-
         if (scannedPairingUrl || url.includes("token=") || url.includes("#")) {
           await addConnection({ pairingUrl: normalizeHostInput(url) });
         } else if (code) {
@@ -55,6 +106,12 @@ export default function ConnectionsScreen() {
         } else {
           await addConnection({ pairingUrl: normalizeHostInput(url) });
         }
+
+        const parsed = parsePairingUrl(url);
+        const retainedServerUrl = parsed.host || url;
+        setServerUrl(retainedServerUrl);
+        setPairingCode("");
+        await savePairingDraft({ serverUrl: retainedServerUrl, pairingCode: "" });
         setShowScanner(false);
       } catch (connectError) {
         setError(
@@ -75,24 +132,18 @@ export default function ConnectionsScreen() {
       setShowScanner(true);
       return;
     }
-
     const permission = await requestCameraPermission();
     if (permission.granted) {
       setScannerLocked(false);
       setShowScanner(true);
       return;
     }
-
-    Alert.alert(
-      "Camera access needed",
-      "Allow camera access to scan an environment pairing QR code."
-    );
+    Alert.alert("Camera access needed", "Allow camera access to scan a T3 Code pairing QR code.");
   }, [cameraPermission?.granted, requestCameraPermission]);
 
   const handleQrScan = useCallback(
     ({ data }: { readonly data: string }) => {
       if (scannerLocked) return;
-
       setScannerLocked(true);
       try {
         const pairingUrl = extractPairingUrlFromQrPayload(data);
@@ -103,7 +154,7 @@ export default function ConnectionsScreen() {
       } catch (scanError) {
         Alert.alert(
           "Invalid QR code",
-          scanError instanceof Error ? scanError.message : "Scanned QR code was not recognized."
+          scanError instanceof Error ? scanError.message : "The QR code was not recognized."
         );
       } finally {
         setTimeout(() => setScannerLocked(false), 600);
@@ -113,7 +164,7 @@ export default function ConnectionsScreen() {
   );
 
   const confirmRemove = (environmentId: EnvironmentId, label: string) => {
-    Alert.alert("Remove environment?", `Forget ${label} on this device?`, [
+    Alert.alert("Remove environment?", `Forget ${label} and its cached threads on this device?`, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Remove",
@@ -123,154 +174,263 @@ export default function ConnectionsScreen() {
     ]);
   };
 
-  const saveDisabled = isConnecting || isLoadingDraft || serverUrl.trim().length === 0;
-
   return (
     <Screen>
-      <View className="flex-row items-center gap-3 border-b border-divider px-4 pb-3 pt-1">
-        <Button size="sm" variant="ghost" onPress={() => router.back()}>
-          Back
-        </Button>
+      <View className="flex-row items-center gap-3 border-b border-separator px-3 pb-3 pt-2">
+        <Pressable
+          onPress={() => router.back()}
+          className="h-10 w-10 items-center justify-center rounded-full bg-default"
+        >
+          <AppIcon name="back" size={21} color={isDark ? "#f5f5f5" : "#262626"} />
+        </Pressable>
         <View className="flex-1">
-          <Text className="text-lg font-semibold text-foreground">Environments</Text>
-          <Text className="text-xs text-muted">
-            Enter a server URL or scan a QR code to pair with T3 Code.
-          </Text>
+          <Text className="text-lg font-bold text-foreground">Environments</Text>
+          <Text className="text-xs text-muted">Pair, sync, and inspect server connections</Text>
         </View>
-      </View>
-
-      <View className="gap-3 px-4 pb-3 pt-4">
-        <View className="gap-1.5">
-          <Text className="text-xs font-semibold uppercase tracking-[1px] text-muted">
-            Server URL
-          </Text>
-          {isLoadingDraft ? (
-            <ActivityIndicator style={{ paddingVertical: 12 }} color="#18181b" />
-          ) : (
-            <Input
-              value={serverUrl}
-              onChangeText={setServerUrl}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              placeholder="http://192.168.1.100:8080#token=abc-123"
-            />
-          )}
-        </View>
-
-        <View className="gap-1.5">
-          <Text className="text-xs font-semibold uppercase tracking-[1px] text-muted">
-            Pairing code (optional)
-          </Text>
-          <Input
-            value={pairingCode}
-            onChangeText={setPairingCode}
-            autoCapitalize="none"
-            autoCorrect={false}
-            placeholder="abc-123-xyz"
-          />
-        </View>
-
-        {error ? <Text className="text-sm leading-5 text-danger">{error}</Text> : null}
-
-        <View className="flex-row gap-2">
-          <Button className="flex-1" isDisabled={saveDisabled} onPress={() => void connect()}>
-            {isConnecting ? "Saving..." : "Save & Connect"}
-          </Button>
-          <Button
-            variant="secondary"
-            onPress={() => {
-              if (showScanner) setShowScanner(false);
-              else void openScanner();
-            }}
+        {environments.length > 0 ? (
+          <Pressable
+            onPress={() => void reloadThreads()}
+            className="h-10 w-10 items-center justify-center rounded-full border border-border bg-surface"
           >
-            {showScanner ? "Hide QR" : "Scan QR"}
-          </Button>
-        </View>
-
-        {showScanner ? (
-          <Card variant="secondary">
-            <Card.Body className="gap-3">
-              <Card.Description>
-                Point your camera at the pairing QR code shown in T3 Code.
-              </Card.Description>
-              {cameraPermission?.granted ? (
-                <View className="overflow-hidden rounded-2xl">
-                  <CameraView
-                    barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-                    onBarcodeScanned={handleQrScan}
-                    style={{ aspectRatio: 1, width: "100%" }}
-                  />
-                </View>
-              ) : (
-                <Button variant="secondary" onPress={() => void openScanner()}>
-                  Allow camera
-                </Button>
-              )}
-            </Card.Body>
-          </Card>
+            <AppIcon name="refresh" size={19} color={isDark ? "#f5f5f5" : "#262626"} />
+          </Pressable>
         ) : null}
       </View>
 
       <ScrollView
+        ref={scrollRef}
         className="flex-1"
-        contentContainerStyle={{ gap: 16, paddingHorizontal: 16, paddingBottom: 40 }}
+        style={{ backgroundColor: palette.background }}
+        contentContainerStyle={{
+          gap: 20,
+          paddingHorizontal: 16,
+          paddingBottom: 40,
+          paddingTop: 18,
+        }}
         keyboardShouldPersistTaps="handled"
       >
-        {environments.map((environment) => (
-          <Card key={environment.connection.environmentId}>
-            <Card.Body className="gap-3">
-              <View className="flex-row items-center justify-between gap-3">
-                <View className="flex-1">
-                  <Card.Title>{environment.connection.label}</Card.Title>
-                  <Card.Description numberOfLines={1}>
-                    {environment.connection.httpBaseUrl}
-                  </Card.Description>
-                </View>
-                <Chip
-                  size="sm"
-                  variant="soft"
-                  color={
-                    environment.connectionState === "ready"
-                      ? "success"
-                      : environment.connectionState === "disconnected"
-                        ? "danger"
-                        : "warning"
-                  }
-                >
-                  {environment.connectionState}
-                </Chip>
-              </View>
-              <Text className="text-xs text-muted">
-                {environment.snapshot?.threads.filter((thread) => thread.archivedAt == null)
-                  .length ?? 0}{" "}
-                threads · {environment.snapshot?.projects.length ?? 0} projects
-                {environment.isCachedSnapshot ? " · cached" : ""}
+        <View
+          collapsable={false}
+          className="gap-4 rounded-[28px] border border-border bg-surface p-4"
+          style={{ backgroundColor: palette.surface, borderColor: palette.border }}
+        >
+          <View>
+            <Text className="text-base font-bold text-foreground">Add a server</Text>
+            <Text className="mt-1 text-sm leading-5 text-muted">
+              Paste the full pairing link, or enter the Tailscale address and pairing code.
+            </Text>
+          </View>
+
+          <View className="gap-2">
+            <Text className="text-xs font-bold uppercase tracking-[0.8px] text-muted">
+              Server or pairing URL
+            </Text>
+            {isLoadingDraft ? (
+              <ActivityIndicator style={{ paddingVertical: 14 }} color="#f97316" />
+            ) : (
+              <TextInput
+                value={serverUrl}
+                onChangeText={setServerUrl}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                placeholder="100.100.10.20:3773 or full pairing link"
+                placeholderTextColor={isDark ? "#737373" : "#9a9a9a"}
+                className="min-h-13 rounded-2xl border border-border bg-background px-4 py-3 text-[15px] text-foreground"
+                style={{
+                  minHeight: 52,
+                  backgroundColor: palette.input,
+                  borderColor: palette.border,
+                  color: isDark ? "#f5f5f5" : "#171717",
+                }}
+              />
+            )}
+          </View>
+
+          <View className="gap-2">
+            <Text className="text-xs font-bold uppercase tracking-[0.8px] text-muted">
+              Pairing code
+            </Text>
+            <TextInput
+              value={pairingCode}
+              onChangeText={setPairingCode}
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder="Optional when included in the URL"
+              placeholderTextColor={isDark ? "#737373" : "#9a9a9a"}
+              className="min-h-13 rounded-2xl border border-border bg-background px-4 py-3 text-[15px] text-foreground"
+              style={{
+                minHeight: 52,
+                backgroundColor: palette.input,
+                borderColor: palette.border,
+                color: isDark ? "#f5f5f5" : "#171717",
+              }}
+            />
+          </View>
+
+          {isExpoGo && usesPlainHttp ? (
+            <View className="rounded-2xl bg-warning-soft px-3 py-2.5">
+              <Text className="text-sm leading-5 text-warning">
+                Expo Go may block plain HTTP tailnet servers. Install this project&apos;s Android or
+                iOS development build before testing the connection.
               </Text>
-              {environment.error ? (
-                <Text className="text-sm leading-5 text-danger">{environment.error}</Text>
-              ) : null}
-            </Card.Body>
-            <Card.Footer className="gap-2">
-              <Button
-                size="sm"
-                variant="secondary"
-                onPress={() => void reconnect(environment.connection.environmentId)}
+            </View>
+          ) : null}
+
+          {error ? (
+            <View className="rounded-2xl bg-danger-soft px-3 py-2.5">
+              <Text className="text-sm leading-5 text-danger">{error}</Text>
+            </View>
+          ) : null}
+
+          <View className="flex-row gap-2">
+            <Pressable
+              disabled={isConnecting || isLoadingDraft || !serverUrl.trim()}
+              onPress={() => void connect()}
+              className={`h-12 flex-1 items-center justify-center rounded-full ${
+                isConnecting || isLoadingDraft || !serverUrl.trim() ? "bg-default" : "bg-accent"
+              }`}
+            >
+              <Text
+                className={`font-semibold ${
+                  isConnecting || isLoadingDraft || !serverUrl.trim()
+                    ? "text-muted"
+                    : "text-accent-foreground"
+                }`}
               >
-                Reconnect
-              </Button>
-              <Button
-                size="sm"
-                variant="danger-soft"
-                onPress={() =>
-                  confirmRemove(environment.connection.environmentId, environment.connection.label)
-                }
-              >
-                Remove
-              </Button>
-            </Card.Footer>
-          </Card>
-        ))}
+                {isConnecting ? "Pairing..." : "Pair & connect"}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => {
+                if (showScanner) setShowScanner(false);
+                else void openScanner();
+              }}
+              className="h-12 items-center justify-center rounded-full border border-border bg-default px-5"
+            >
+              <Text className="font-semibold text-foreground">
+                {showScanner ? "Hide" : "Scan QR"}
+              </Text>
+            </Pressable>
+          </View>
+
+          {showScanner ? (
+            <View className="overflow-hidden rounded-2xl">
+              {cameraPermission?.granted ? (
+                <CameraView
+                  barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+                  onBarcodeScanned={handleQrScan}
+                  style={{ aspectRatio: 1, width: "100%" }}
+                />
+              ) : (
+                <Pressable onPress={() => void openScanner()} className="bg-default px-4 py-8">
+                  <Text className="text-center font-semibold text-foreground">
+                    Allow camera access
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+          ) : null}
+        </View>
+
+        {environments.length > 0 ? (
+          <View className="gap-3">
+            <Text className="px-1 text-xs font-bold uppercase tracking-[0.8px] text-muted">
+              Saved environments
+            </Text>
+            {environments.map((environment) => {
+              const tone = connectionTone(
+                environment.connectionState,
+                environment.dataSource,
+                isDark
+              );
+              return (
+                <View
+                  key={environment.connection.environmentId}
+                  className="gap-3 rounded-[28px] border border-border bg-surface p-4"
+                  style={{ backgroundColor: palette.surface, borderColor: palette.border }}
+                >
+                  <View className="flex-row items-start gap-3">
+                    <View className="h-11 w-11 items-center justify-center rounded-2xl bg-default">
+                      <AppIcon name="terminal" size={21} color={tone.color} />
+                    </View>
+                    <View className="flex-1">
+                      <Text className="text-base font-bold text-foreground">
+                        {environment.connection.label}
+                      </Text>
+                      <Text className="mt-0.5 text-xs text-muted" numberOfLines={1}>
+                        {environment.connection.httpBaseUrl}
+                      </Text>
+                    </View>
+                    <View
+                      className="rounded-full px-2.5 py-1"
+                      style={{ backgroundColor: tone.background }}
+                    >
+                      <Text className="text-[11px] font-semibold" style={{ color: tone.color }}>
+                        {tone.label}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View className="flex-row gap-4">
+                    <Text className="text-xs text-muted">
+                      {environment.snapshot?.threads.filter((thread) => thread.archivedAt == null)
+                        .length ?? 0}{" "}
+                      threads
+                    </Text>
+                    <Text className="text-xs text-muted">
+                      {environment.snapshot?.projects.length ?? 0} projects
+                    </Text>
+                    {environment.lastSyncedAt ? (
+                      <Text className="text-xs text-muted">
+                        synced {relativeTime(environment.lastSyncedAt)}
+                      </Text>
+                    ) : null}
+                  </View>
+
+                  {environment.error ? (
+                    <Text className="text-xs leading-5 text-warning">{environment.error}</Text>
+                  ) : null}
+
+                  <View className="flex-row gap-2">
+                    <Pressable
+                      onPress={() => {
+                        setServerUrl(environment.connection.httpBaseUrl);
+                        setPairingCode("");
+                        setError(null);
+                        requestAnimationFrame(() =>
+                          scrollRef.current?.scrollTo({ y: 0, animated: true })
+                        );
+                      }}
+                      className="flex-1 items-center rounded-full bg-accent px-4 py-2.5"
+                    >
+                      <Text className="text-sm font-semibold text-accent-foreground">Re-pair</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => void reconnect(environment.connection.environmentId)}
+                      className="items-center rounded-full bg-default px-4 py-2.5"
+                    >
+                      <Text className="text-sm font-semibold text-foreground">Reconnect</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() =>
+                        confirmRemove(
+                          environment.connection.environmentId,
+                          environment.connection.label
+                        )
+                      }
+                      className="items-center rounded-full bg-danger-soft px-4 py-2.5"
+                    >
+                      <Text className="text-sm font-semibold text-danger">Remove</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        ) : null}
+
+        <StatusLogPanel />
       </ScrollView>
     </Screen>
   );

@@ -10,11 +10,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { newId } from "@/utils/id";
-import {
-  clearCachedThreadDetail,
-  loadCachedThreadDetail,
-  saveCachedThreadDetail,
-} from "./db";
+import { clearCachedThreadDetail, loadCachedThreadDetail, saveCachedThreadDetail } from "./db";
 import { useEnvironments } from "./EnvironmentProvider";
 import { logStatus } from "./statusLog";
 
@@ -39,11 +35,13 @@ interface QueuedSend {
 export function useThread(environmentIdRaw: string, threadIdRaw: string) {
   const environmentId = EnvironmentId.make(environmentIdRaw);
   const threadId = ThreadId.make(threadIdRaw);
-  const { getClient, getEnvironment, threads } = useEnvironments();
+  const { dispatchCommand, getClient, getEnvironment, reloadThreads, threads } = useEnvironments();
   const environment = getEnvironment(environmentId);
   const shell = threads.find(
     (candidate) => candidate.environmentId === environmentId && candidate.id === threadId
   );
+  const hasShell = shell !== undefined;
+  const hasEnvironmentSnapshot = environment?.snapshot != null;
   const [state, setState] = useState<ThreadState>({
     data: null,
     isPending: true,
@@ -95,6 +93,10 @@ export function useThread(environmentIdRaw: string, threadIdRaw: string) {
           setState((current) => ({
             ...current,
             isPending: false,
+            error:
+              hasShell && hasEnvironmentSnapshot
+                ? "Thread history has not been downloaded yet. Refresh to try again."
+                : current.error,
           }));
         }
         logStatus("thread", "info", "No cached thread", threadId, { environmentId });
@@ -202,7 +204,16 @@ export function useThread(environmentIdRaw: string, threadIdRaw: string) {
       cancelled = true;
       unsubscribe();
     };
-  }, [environment?.sessionRevision, environmentId, getClient, persistThread, targetKey, threadId]);
+  }, [
+    environment?.sessionRevision,
+    environmentId,
+    getClient,
+    hasEnvironmentSnapshot,
+    hasShell,
+    persistThread,
+    targetKey,
+    threadId,
+  ]);
 
   const messages = useMemo(() => {
     const confirmed = state.data?.messages ?? [];
@@ -216,28 +227,26 @@ export function useThread(environmentIdRaw: string, threadIdRaw: string) {
   useEffect(() => {
     const queued = queuedSends[0];
     const thread = state.data;
-    const client = getClient(environmentId);
     const busy = thread?.session?.status === "running" || thread?.session?.status === "starting";
-    if (!queued || queued.targetKey !== targetKey || !thread || !client || busy || isDispatching) {
+    if (!queued || queued.targetKey !== targetKey || !thread || busy || isDispatching) {
       return;
     }
 
     setIsDispatching(true);
-    void client.orchestration
-      .dispatchCommand({
-        type: "thread.turn.start",
-        commandId: queued.commandId,
-        threadId,
-        message: {
-          messageId: queued.message.id,
-          role: "user",
-          text: queued.message.text,
-          attachments: [],
-        },
-        runtimeMode: thread.runtimeMode,
-        interactionMode: thread.interactionMode,
-        createdAt: queued.message.createdAt,
-      })
+    void dispatchCommand(environmentId, {
+      type: "thread.turn.start",
+      commandId: queued.commandId,
+      threadId,
+      message: {
+        messageId: queued.message.id,
+        role: "user",
+        text: queued.message.text,
+        attachments: [],
+      },
+      runtimeMode: thread.runtimeMode,
+      interactionMode: thread.interactionMode,
+      createdAt: queued.message.createdAt,
+    })
       .then(() => {
         setQueuedSends((current) =>
           current.filter((candidate) => candidate.message.id !== queued.message.id)
@@ -251,9 +260,16 @@ export function useThread(environmentIdRaw: string, threadIdRaw: string) {
           current.filter((message) => message.id !== queued.message.id)
         );
         setSendError(error instanceof Error ? error.message : "Unable to send the queued prompt.");
+        logStatus(
+          "thread",
+          "danger",
+          "Prompt failed",
+          error instanceof Error ? error.message : "Unable to send the queued prompt.",
+          { environmentId }
+        );
       })
       .finally(() => setIsDispatching(false));
-  }, [environmentId, getClient, isDispatching, queuedSends, state.data, targetKey, threadId]);
+  }, [dispatchCommand, environmentId, isDispatching, queuedSends, state.data, targetKey, threadId]);
 
   const sendMessage = useCallback(
     async (text: string) => {
@@ -300,5 +316,8 @@ export function useThread(environmentIdRaw: string, threadIdRaw: string) {
     sendError,
     sendMessage,
     clearSendError,
+    refresh: () => reloadThreads(environmentId),
+    connectionState: environment?.connectionState ?? "disconnected",
+    dataSource: environment?.dataSource ?? "none",
   };
 }
