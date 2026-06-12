@@ -31,7 +31,10 @@ export interface DefaultBranchActionDialogCopy {
   title: string;
   description: string;
   continueLabel: string;
+  featureBranchLabel: string;
 }
+
+export type DefaultBranchConfirmationChoice = "abort" | "continue" | "feature_branch";
 
 export type DefaultBranchConfirmableAction =
   | "push"
@@ -347,17 +350,45 @@ export function getGitActionDisabledReason(input: {
   return "Create PR is currently unavailable.";
 }
 
+export function threadHasCommits(gitStatus: VcsStatusResult): boolean {
+  return (gitStatus.aheadOfDefaultCount ?? gitStatus.aheadCount) > 0;
+}
+
+export function actionIncludesPendingCommit(input: {
+  action: GitStackedAction;
+  hasWorkingTreeChanges: boolean;
+  featureBranch?: boolean;
+}): boolean {
+  if (
+    input.action !== "commit" &&
+    input.action !== "commit_push" &&
+    input.action !== "commit_push_pr"
+  ) {
+    return false;
+  }
+  return (
+    input.action === "commit" || input.hasWorkingTreeChanges || input.featureBranch === true
+  );
+}
+
 export function requiresDefaultBranchConfirmation(
   action: GitStackedAction,
-  isDefaultBranch: boolean
+  isDefaultBranch: boolean,
+  gitStatus?: VcsStatusResult | null
 ): boolean {
   if (!isDefaultBranch) return false;
-  return (
-    action === "push" ||
-    action === "create_pr" ||
-    action === "commit_push" ||
-    action === "commit_push_pr"
-  );
+  if (
+    action !== "push" &&
+    action !== "create_pr" &&
+    action !== "commit_push" &&
+    action !== "commit_push_pr"
+  ) {
+    return false;
+  }
+  if (gitStatus && threadHasCommits(gitStatus)) {
+    return false;
+  }
+  return true;
 }
 
 export function resolveDefaultBranchActionDialogCopy(input: {
@@ -366,34 +397,38 @@ export function resolveDefaultBranchActionDialogCopy(input: {
   includesCommit: boolean;
 }): DefaultBranchActionDialogCopy {
   const branchLabel = input.branchName;
-  const suffix = ` on "${branchLabel}". You can continue on this branch or create a feature branch and run the same action there.`;
+  const suffix = ` on "${branchLabel}". You can continue on this ref or create a feature ref and run the same action there.`;
 
   if (input.action === "push" || input.action === "commit_push") {
     if (input.includesCommit) {
       return {
-        title: "Commit & push to default branch?",
+        title: "Commit & push to default ref?",
         description: `This action will commit and push changes${suffix}`,
         continueLabel: `Commit & push to ${branchLabel}`,
+        featureBranchLabel: "Checkout feature branch & continue",
       };
     }
     return {
-      title: "Push to default branch?",
+      title: "Push to default ref?",
       description: `This action will push local commits${suffix}`,
       continueLabel: `Push to ${branchLabel}`,
+      featureBranchLabel: "Checkout feature branch & continue",
     };
   }
 
   if (input.includesCommit) {
     return {
-      title: "Commit, push & create PR from default branch?",
+      title: "Commit, push & create PR from default ref?",
       description: `This action will commit, push, and create a PR${suffix}`,
       continueLabel: "Commit, push & create PR",
+      featureBranchLabel: "Checkout feature branch & continue",
     };
   }
   return {
-    title: "Push & create PR from default branch?",
+    title: "Push & create PR from default ref?",
     description: `This action will push local commits and create a PR${suffix}`,
     continueLabel: "Push & create PR",
+    featureBranchLabel: "Checkout feature branch & continue",
   };
 }
 

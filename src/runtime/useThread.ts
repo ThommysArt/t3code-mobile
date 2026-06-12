@@ -10,6 +10,7 @@ import {
 } from "@t3tools/contracts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { normalizeModelSelection } from "@/features/thread/modelOptions";
 import { newId } from "@/utils/id";
 import { clearCachedThreadDetail, loadCachedThreadDetail, saveCachedThreadDetail } from "./db";
 import { useEnvironments } from "./EnvironmentProvider";
@@ -245,7 +246,7 @@ export function useThread(environmentIdRaw: string, threadIdRaw: string) {
         text: queued.message.text,
         attachments: [],
       },
-      modelSelection: queued.modelSelection,
+      modelSelection: normalizeModelSelection(queued.modelSelection),
       runtimeMode: thread.runtimeMode,
       interactionMode: thread.interactionMode,
       createdAt: queued.message.createdAt,
@@ -312,7 +313,7 @@ export function useThread(environmentIdRaw: string, threadIdRaw: string) {
         type: "thread.meta.update",
         commandId: CommandId.make(newId()),
         threadId,
-        modelSelection,
+        modelSelection: normalizeModelSelection(modelSelection),
       });
     },
     [dispatchCommand, environmentId, state.data, threadId]

@@ -30,6 +30,7 @@ import {
   buildModelOptions,
   getDescriptorDefaultValue,
   getModelSelectionOption,
+  normalizeModelSelection,
   setModelSelectionOption,
   thinkingOptionDescriptors,
   type ModelOption,
@@ -107,6 +108,7 @@ export function NewThreadScreen() {
     const threadId = ThreadId.make(newId());
     const createdAt = new Date().toISOString();
     const title = titleFromPrompt(prompt);
+    const modelSelection = normalizeModelSelection(selectedModel);
     try {
       await dispatchCommand(project.environmentId, {
         type: "thread.turn.start",
@@ -118,7 +120,7 @@ export function NewThreadScreen() {
           text: prompt.trim(),
           attachments: [],
         },
-        modelSelection: selectedModel,
+        modelSelection,
         titleSeed: title,
         runtimeMode: DEFAULT_RUNTIME_MODE,
         interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
@@ -126,7 +128,7 @@ export function NewThreadScreen() {
           createThread: {
             projectId: project.id,
             title,
-            modelSelection: selectedModel,
+            modelSelection,
             runtimeMode: DEFAULT_RUNTIME_MODE,
             interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
             branch: null,
@@ -222,20 +224,22 @@ export function NewThreadScreen() {
                 {selectedOption?.label ?? selectedModel?.model ?? "Select model"}
               </Text>
             </Pressable>
-            <Pressable
-              onPress={() => setThinkingDrawerOpen(true)}
-              className="max-w-[32%] rounded-full bg-default px-4 py-3"
-            >
-              <Text className="text-sm font-semibold text-muted" numberOfLines={1}>
-                {typeof thinkingValue === "string"
-                  ? thinkingValue
-                  : typeof thinkingValue === "boolean"
+            {thinkingDescriptors.length > 0 ? (
+              <Pressable
+                onPress={() => setThinkingDrawerOpen(true)}
+                className="max-w-[32%] rounded-full bg-default px-4 py-3"
+              >
+                <Text className="text-sm font-semibold text-muted" numberOfLines={1}>
+                  {typeof thinkingValue === "string"
                     ? thinkingValue
-                      ? "Thinking on"
-                      : "Thinking off"
-                    : "Thinking"}
-              </Text>
-            </Pressable>
+                    : typeof thinkingValue === "boolean"
+                      ? thinkingValue
+                        ? "Thinking on"
+                        : "Thinking off"
+                      : "Thinking"}
+                </Text>
+              </Pressable>
+            ) : null}
             <Pressable
               disabled={!canSubmit}
               onPress={() => void submit()}
@@ -267,7 +271,7 @@ export function NewThreadScreen() {
           onSelect={selectModel}
         />
       ) : null}
-      {selectedModel ? (
+      {selectedModel && thinkingDescriptors.length > 0 ? (
         <ThinkingOptionsDrawer
           descriptors={thinkingDescriptors}
           selection={selectedModel}

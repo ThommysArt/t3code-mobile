@@ -7,6 +7,7 @@ import {
   getModelSelectionOption,
   groupModelOptions,
   modelOptionsForConversation,
+  normalizeModelSelection,
   setModelSelectionOption,
   thinkingOptionDescriptors,
 } from "./modelOptions";
@@ -131,6 +132,56 @@ describe("buildModelOptions", () => {
       modelOptionsForConversation(options, selection, true).map((option) => option.label)
     ).toEqual(["GPT-5.4"]);
     expect(modelOptionsForConversation(options, selection, false)).toEqual(options);
+  });
+
+  it("omits options when a model has no provider option descriptors", () => {
+    const codex = ProviderInstanceId.make("codex-main");
+    const config = {
+      providers: [
+        {
+          instanceId: codex,
+          driver: "codex",
+          displayName: "Codex",
+          enabled: true,
+          installed: true,
+          auth: { status: "authenticated" },
+          models: [{ slug: "gpt-5.4", name: "GPT-5.4" }],
+        },
+      ],
+    } as unknown as ServerConfig;
+
+    const [option] = buildModelOptions(config, null);
+
+    expect(option?.selection).toEqual({
+      instanceId: codex,
+      model: "gpt-5.4",
+    });
+    expect("options" in (option?.selection ?? {})).toBe(false);
+    expect(thinkingOptionDescriptors(option ?? null)).toEqual([]);
+  });
+
+  it("strips empty or undefined options before dispatch", () => {
+    const codex = ProviderInstanceId.make("codex-main");
+    expect(
+      normalizeModelSelection({
+        instanceId: codex,
+        model: "gpt-5.4",
+        options: undefined,
+      })
+    ).toEqual({
+      instanceId: codex,
+      model: "gpt-5.4",
+    });
+    expect(
+      normalizeModelSelection({
+        instanceId: codex,
+        model: "gpt-5.4",
+        options: [],
+      })
+    ).toEqual({
+      instanceId: codex,
+      model: "gpt-5.4",
+    });
   });
 
   it("updates one advertised option without dropping the others", () => {

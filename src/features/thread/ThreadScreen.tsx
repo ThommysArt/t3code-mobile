@@ -635,17 +635,19 @@ export function ThreadScreen() {
                 </Text>
                 <AppIcon name="chevron-down" size={15} color={isDark ? "#858585" : "#737373"} />
               </Pressable>
-              <Pressable
-                accessibilityLabel="Thinking options"
-                accessibilityRole="button"
-                disabled={!effectiveModel}
-                onPress={() => setThinkingSelectorOpen(true)}
-                className="mr-2 max-w-[32%] rounded-full bg-default px-3 py-2"
-              >
-                <Text className="text-xs font-semibold text-muted" numberOfLines={1}>
-                  {thinkingLabel}
-                </Text>
-              </Pressable>
+              {thinkingDescriptors.length > 0 ? (
+                <Pressable
+                  accessibilityLabel="Thinking options"
+                  accessibilityRole="button"
+                  disabled={!effectiveModel}
+                  onPress={() => setThinkingSelectorOpen(true)}
+                  className="mr-2 max-w-[32%] rounded-full bg-default px-3 py-2"
+                >
+                  <Text className="text-xs font-semibold text-muted" numberOfLines={1}>
+                    {thinkingLabel}
+                  </Text>
+                </Pressable>
+              ) : null}
               <Pressable
                 accessibilityLabel={busy ? "Stop running agent" : "Send message"}
                 accessibilityRole="button"
@@ -676,7 +678,7 @@ export function ThreadScreen() {
           onSelect={selectModel}
         />
       ) : null}
-      {effectiveModel ? (
+      {effectiveModel && thinkingDescriptors.length > 0 ? (
         <ThinkingOptionsDrawer
           descriptors={thinkingDescriptors}
           selection={effectiveModel}

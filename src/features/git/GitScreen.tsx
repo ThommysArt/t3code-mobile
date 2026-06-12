@@ -1,9 +1,11 @@
 import {
+  actionIncludesPendingCommit,
   buildMenuItems,
   getGitActionDisabledReason,
   requiresDefaultBranchConfirmation,
   resolveDefaultBranchActionDialogCopy,
   resolveQuickAction,
+  type DefaultBranchConfirmationChoice,
   type GitActionRequestInput,
 } from "@t3tools/client-runtime";
 import {
@@ -13,7 +15,7 @@ import {
   type GitStackedAction,
 } from "@t3tools/contracts";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Button, Card, Chip, Input, useToast } from "heroui-native";
+import { Button, Card, Chip, Input, Toast, useToast } from "heroui-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Linking, Pressable, ScrollView, Text, useColorScheme, View } from "react-native";
 
@@ -51,6 +53,37 @@ function progressLabel(event: GitActionProgressEvent): string {
 
 function actionIncludesCommit(action: GitStackedAction): boolean {
   return action === "commit" || action === "commit_push" || action === "commit_push_pr";
+}
+
+function resolvePendingCommit(
+  action: GitStackedAction,
+  hasWorkingTreeChanges: boolean,
+  featureBranch?: boolean
+): boolean {
+  return actionIncludesPendingCommit({ action, hasWorkingTreeChanges, featureBranch });
+}
+
+function GitConfirmActionButton(props: {
+  readonly label: string;
+  readonly variant: "primary" | "secondary";
+  readonly isDark: boolean;
+  readonly onPress: () => void;
+}) {
+  const iconColor = props.variant === "primary" ? "#ffffff" : props.isDark ? "#f0f0f0" : "#262626";
+
+  return (
+    <Button
+      size="sm"
+      variant={props.variant}
+      className="min-w-0 flex-1"
+      onPress={props.onPress}
+    >
+      <View className="flex-row items-center gap-1.5">
+        <AppIcon name="arrow-up" size={14} color={iconColor} />
+        <Button.Label>{props.label}</Button.Label>
+      </View>
+    </Button>
+  );
 }
 
 export function GitScreen() {
@@ -103,34 +136,59 @@ export function GitScreen() {
   );
 
   const confirmDefaultBranch = useCallback(
-    (action: GitStackedAction, branch: string): Promise<boolean> => {
-      if (action === "commit") return Promise.resolve(true);
+    (action: GitStackedAction, branch: string): Promise<DefaultBranchConfirmationChoice> => {
+      if (action === "commit") return Promise.resolve("continue");
       const copy = resolveDefaultBranchActionDialogCopy({
         action,
         branchName: branch,
-        includesCommit: actionIncludesCommit(action),
+        includesCommit: resolvePendingCommit(action, status?.hasWorkingTreeChanges ?? false),
       });
       return new Promise((resolve) => {
         let resolved = false;
-        let toastId = "";
-        toastId = toast.show({
-          variant: "warning",
+        const finish = (choice: DefaultBranchConfirmationChoice) => {
+          resolved = true;
+          resolve(choice);
+        };
+        toast.show({
           duration: "persistent",
-          label: copy.title,
-          description: copy.description,
-          actionLabel: copy.continueLabel,
-          onActionPress: ({ hide }) => {
-            resolved = true;
-            hide(toastId);
-            resolve(true);
-          },
+          component: (props) => (
+            <Toast variant="warning" className="flex-col gap-3" {...props}>
+              <View className="flex-row items-start justify-between gap-3">
+                <View className="min-w-0 flex-1 gap-1">
+                  <Toast.Title className="text-primary">{copy.title}</Toast.Title>
+                  <Toast.Description>{copy.description}</Toast.Description>
+                </View>
+                <Toast.Close />
+              </View>
+              <View className="flex-row flex-wrap gap-2">
+                <GitConfirmActionButton
+                  label={branch}
+                  variant="secondary"
+                  isDark={isDark}
+                  onPress={() => {
+                    props.hide();
+                    finish("continue");
+                  }}
+                />
+                <GitConfirmActionButton
+                  label="feature"
+                  variant="primary"
+                  isDark={isDark}
+                  onPress={() => {
+                    props.hide();
+                    finish("feature_branch");
+                  }}
+                />
+              </View>
+            </Toast>
+          ),
           onHide: () => {
-            if (!resolved) resolve(false);
+            if (!resolved) resolve("abort");
           },
         });
       });
     },
-    [toast]
+    [isDark, status?.hasWorkingTreeChanges, toast]
   );
 
   const runAction = useCallback(
@@ -147,16 +205,23 @@ export function GitScreen() {
         return;
       }
       const branch = status?.refName;
+      let actionInput = input;
       if (
         branch &&
-        requiresDefaultBranchConfirmation(input.action, status?.isDefaultRef ?? false) &&
-        !(await confirmDefaultBranch(input.action, branch))
+        !input.featureBranch &&
+        requiresDefaultBranchConfirmation(input.action, status?.isDefaultRef ?? false, status)
       ) {
-        return;
+        const confirmation = await confirmDefaultBranch(input.action, branch);
+        if (confirmation === "abort") {
+          return;
+        }
+        if (confirmation === "feature_branch") {
+          actionInput = { ...input, featureBranch: true };
+        }
       }
 
       setOperationLabel("Starting source-control action");
-      logStatus("git", "info", "Source-control action started", input.action, {
+      logStatus("git", "info", "Source-control action started", actionInput.action, {
         environmentId,
         phase: "syncing",
         inProgress: true,
@@ -166,7 +231,7 @@ export function GitScreen() {
           {
             cwd,
             actionId: newId(),
-            ...input,
+            ...actionInput,
           },
           {
             onProgress: (event) => setOperationLabel(progressLabel(event)),

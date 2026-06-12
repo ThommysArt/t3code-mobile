@@ -48,11 +48,11 @@ export function buildModelOptions(
         providerLabel: providerLabel(provider),
         providerDriver: provider.driver,
         optionDescriptors: model.capabilities?.optionDescriptors ?? [],
-        selection: {
-          instanceId: provider.instanceId,
-          model: model.slug,
-          options: defaultOptionSelections(model.capabilities?.optionDescriptors ?? []),
-        },
+        selection: buildModelSelection(
+          provider.instanceId,
+          model.slug,
+          model.capabilities?.optionDescriptors ?? []
+        ),
       });
     }
   }
@@ -75,9 +75,11 @@ export function buildModelOptions(
   return [...options.values()];
 }
 
-function defaultOptionSelections(
+function buildModelSelection(
+  instanceId: string,
+  model: string,
   descriptors: readonly ProviderOptionDescriptor[]
-): ModelSelection["options"] {
+): ModelSelection {
   const selections: { id: string; value: ProviderOptionSelectionValue }[] = [];
   for (const descriptor of descriptors) {
     if (descriptor.type === "boolean") {
@@ -90,7 +92,16 @@ function defaultOptionSelections(
       descriptor.currentValue ?? descriptor.options.find((option) => option.isDefault)?.id;
     if (value) selections.push({ id: descriptor.id, value });
   }
-  return selections.length > 0 ? selections : undefined;
+  const base = { instanceId, model } as ModelSelection;
+  return selections.length > 0 ? { ...base, options: selections } : base;
+}
+
+export function normalizeModelSelection(selection: ModelSelection): ModelSelection {
+  const options = selection.options;
+  if (options === undefined || options.length === 0) {
+    return { instanceId: selection.instanceId, model: selection.model };
+  }
+  return selection;
 }
 
 export function groupModelOptions(options: readonly ModelOption[]): readonly ProviderGroup[] {
