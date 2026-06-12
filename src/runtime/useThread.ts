@@ -14,7 +14,7 @@ import { normalizeModelSelection } from "@/features/thread/modelOptions";
 import { newId } from "@/utils/id";
 import { clearCachedThreadDetail, loadCachedThreadDetail, saveCachedThreadDetail } from "./db";
 import { useEnvironments } from "./EnvironmentProvider";
-import { logStatus } from "./statusLog";
+import { formatRemoteError, logStatus } from "./statusLog";
 
 interface ThreadState {
   readonly data: OrchestrationThread | null;
@@ -263,14 +263,9 @@ export function useThread(environmentIdRaw: string, threadIdRaw: string) {
         setOptimisticMessages((current) =>
           current.filter((message) => message.id !== queued.message.id)
         );
-        setSendError(error instanceof Error ? error.message : "Unable to send the queued prompt.");
-        logStatus(
-          "thread",
-          "danger",
-          "Prompt failed",
-          error instanceof Error ? error.message : "Unable to send the queued prompt.",
-          { environmentId }
-        );
+        const message = formatRemoteError(error) || "Unable to send the queued prompt.";
+        setSendError(message);
+        logStatus("thread", "danger", "Prompt failed", message, { environmentId });
       })
       .finally(() => setIsDispatching(false));
   }, [dispatchCommand, environmentId, isDispatching, queuedSends, state.data, targetKey, threadId]);
@@ -330,7 +325,7 @@ export function useThread(environmentIdRaw: string, threadIdRaw: string) {
         createdAt: new Date().toISOString(),
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Unable to stop the running turn.";
+      const message = formatRemoteError(error) || "Unable to stop the running turn.";
       setSendError(message);
       logStatus("thread", "danger", "Stop failed", message, { environmentId });
     }

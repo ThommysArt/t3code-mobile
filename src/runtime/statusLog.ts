@@ -1,3 +1,5 @@
+import { compactProviderError } from "../utils/providerErrors";
+
 export type StatusLevel = "info" | "success" | "warning" | "danger";
 
 export type StatusScope = "app" | "db" | "environment" | "shell" | "thread" | "git";
@@ -120,21 +122,30 @@ export function logStatus(
 }
 
 export function formatRemoteError(error: unknown): string {
+  const compact = (value: string) => sanitizeStatusText(compactProviderError(value));
+
   if (error instanceof Error && error.message.trim()) {
-    return sanitizeStatusText(error.message);
+    return compact(error.message);
+  }
+  if (typeof error === "string" && error.trim()) {
+    return compact(error);
   }
   if (typeof error === "object" && error !== null) {
     const tagged = error as {
       readonly _tag?: string;
       readonly reason?: string;
       readonly message?: string;
+      readonly detail?: string;
     };
     if (tagged.reason) {
-      return sanitizeStatusText(`${tagged._tag ?? "error"}: ${tagged.reason}`);
+      return compact(`${tagged._tag ?? "error"}: ${tagged.reason}`);
     }
     if (tagged.message) {
-      return sanitizeStatusText(tagged.message);
+      return compact(tagged.message);
+    }
+    if (tagged.detail) {
+      return compact(tagged.detail);
     }
   }
-  return sanitizeStatusText(String(error));
+  return compact(String(error));
 }

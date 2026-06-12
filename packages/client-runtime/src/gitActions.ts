@@ -377,12 +377,7 @@ export function requiresDefaultBranchConfirmation(
   gitStatus?: VcsStatusResult | null
 ): boolean {
   if (!isDefaultBranch) return false;
-  if (
-    action !== "push" &&
-    action !== "create_pr" &&
-    action !== "commit_push" &&
-    action !== "commit_push_pr"
-  ) {
+  if (action !== "commit_push" && action !== "commit_push_pr") {
     return false;
   }
   if (gitStatus && threadHasCommits(gitStatus)) {

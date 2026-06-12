@@ -13,7 +13,6 @@ function CodeBlock({
 }) {
   return (
     <View
-      key={node.key}
       style={{
         backgroundColor,
         borderRadius: 12,
@@ -63,10 +62,20 @@ export function MarkdownContent({
   const rules = useMemo<RenderRules>(
     () => ({
       code_block: (node) => (
-        <CodeBlock node={node} backgroundColor={fenceBackground} textColor={fenceText} />
+        <CodeBlock
+          key={node.key}
+          node={node}
+          backgroundColor={fenceBackground}
+          textColor={fenceText}
+        />
       ),
       fence: (node) => (
-        <CodeBlock node={node} backgroundColor={fenceBackground} textColor={fenceText} />
+        <CodeBlock
+          key={node.key}
+          node={node}
+          backgroundColor={fenceBackground}
+          textColor={fenceText}
+        />
       ),
     }),
     [fenceBackground]

@@ -6,6 +6,10 @@
 @source "../node_modules/heroui-native/lib";
 @source "./";
 
+@theme inline {
+  --color-primary: var(--primary);
+}
+
 @layer theme {
   :root {
     @variant light {
@@ -24,6 +28,7 @@
       --default-foreground: #262626;
       --accent: #f97316;
       --accent-foreground: #ffffff;
+      --primary: #f97316;
       --focus: #fb923c;
       --link: #2563eb;
       --color-brand: #f97316;
@@ -47,6 +52,7 @@
       --default-foreground: #f0f0f0;
       --accent: #f97316;
       --accent-foreground: #ffffff;
+      --primary: #fb923c;
       --focus: #fb923c;
       --link: #60a5fa;
       --color-brand: #fb923c;

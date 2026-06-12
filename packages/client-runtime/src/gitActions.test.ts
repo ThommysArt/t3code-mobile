@@ -48,6 +48,13 @@ describe("requiresDefaultBranchConfirmation", () => {
   it("skips confirmation on non-default refs", () => {
     expect(requiresDefaultBranchConfirmation("commit_push", false, status())).toBe(false);
   });
+
+  it("never asks before push once the branch is already chosen", () => {
+    expect(requiresDefaultBranchConfirmation("push", true, status())).toBe(false);
+    expect(
+      requiresDefaultBranchConfirmation("push", true, status({ aheadOfDefaultCount: 1 }))
+    ).toBe(false);
+  });
 });
 
 describe("resolveDefaultBranchActionDialogCopy", () => {

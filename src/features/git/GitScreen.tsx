@@ -23,7 +23,7 @@ import { AppIcon } from "@/components/AppIcon";
 import { ConnectionBanner } from "@/components/ConnectionBanner";
 import { Screen } from "@/components/Screen";
 import { useEnvironments } from "@/runtime/EnvironmentProvider";
-import { logStatus } from "@/runtime/statusLog";
+import { formatRemoteError, logStatus } from "@/runtime/statusLog";
 import { useThread } from "@/runtime/useThread";
 import { useVcsStatus } from "@/runtime/useVcsStatus";
 import { newId } from "@/utils/id";
@@ -155,7 +155,7 @@ export function GitScreen() {
             <Toast variant="warning" className="flex-col gap-3" {...props}>
               <View className="flex-row items-start justify-between gap-3">
                 <View className="min-w-0 flex-1 gap-1">
-                  <Toast.Title className="text-primary">{copy.title}</Toast.Title>
+                  <Toast.Title className="!text-primary">{copy.title}</Toast.Title>
                   <Toast.Description>{copy.description}</Toast.Description>
                 </View>
                 <Toast.Close />
@@ -166,8 +166,8 @@ export function GitScreen() {
                   variant="secondary"
                   isDark={isDark}
                   onPress={() => {
-                    props.hide();
                     finish("continue");
+                    props.hide();
                   }}
                 />
                 <GitConfirmActionButton
@@ -175,8 +175,8 @@ export function GitScreen() {
                   variant="primary"
                   isDark={isDark}
                   onPress={() => {
-                    props.hide();
                     finish("feature_branch");
+                    props.hide();
                   }}
                 />
               </View>
@@ -262,13 +262,17 @@ export function GitScreen() {
                 },
         });
       } catch (error) {
-        logStatus(
-          "git",
-          "danger",
-          "Source-control action failed",
-          error instanceof Error ? error.message : "The source-control action failed.",
-          { environmentId, phase: "error", inProgress: false }
-        );
+        const message = formatRemoteError(error) || "The source-control action failed.";
+        logStatus("git", "danger", "Source-control action failed", message, {
+          environmentId,
+          phase: "error",
+          inProgress: false,
+        });
+        toast.show({
+          variant: "danger",
+          label: "Source-control action failed",
+          description: message,
+        });
       } finally {
         setOperationLabel(null);
       }
@@ -280,8 +284,7 @@ export function GitScreen() {
       environmentId,
       getClient,
       git,
-      status?.isDefaultRef,
-      status?.refName,
+      status,
       toast,
     ]
   );

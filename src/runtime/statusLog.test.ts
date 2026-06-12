@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { clearStatusHistory, getStatusHistory, logStatus, sanitizeStatusText } from "./statusLog";
+import {
+  clearStatusHistory,
+  formatRemoteError,
+  getStatusHistory,
+  logStatus,
+  sanitizeStatusText,
+} from "./statusLog";
 
 describe("status logging", () => {
   afterEach(() => {
@@ -16,6 +22,16 @@ describe("status logging", () => {
     ).toBe(
       'ws://host/ws?ticket=[redacted]&token=[redacted] Bearer [redacted] {"bearerToken":"[redacted]"}'
     );
+  });
+
+  it("compacts provider usage limit failures", () => {
+    expect(
+      formatRemoteError(
+        new Error(
+          "Text generation failed in generateCommitMessage: Codex CLI command failed\nprovider: openai\nERROR: You've hit your usage limit. Try again at 10:38 PM."
+        )
+      )
+    ).toBe("You've reached your usage limit with OpenAI Codex. Try again at 10:38 PM.");
   });
 
   it("keeps a structured bounded history", () => {
