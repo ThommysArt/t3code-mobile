@@ -2,6 +2,7 @@ import {
   buildMenuItems,
   getGitActionDisabledReason,
   requiresDefaultBranchConfirmation,
+  resolveDefaultBranchActionDialogCopy,
   resolveQuickAction,
   type GitActionRequestInput,
 } from "@t3tools/client-runtime";
@@ -12,10 +13,11 @@ import {
   type GitStackedAction,
 } from "@t3tools/contracts";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Button, Card, Checkbox, Chip, Input } from "heroui-native";
-import { useCallback, useMemo, useState } from "react";
-import { Alert, Linking, ScrollView, Text, View } from "react-native";
+import { Button, Card, Checkbox, Chip, Input, useToast } from "heroui-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Linking, Pressable, ScrollView, Text, useColorScheme, View } from "react-native";
 
+import { AppIcon } from "@/components/AppIcon";
 import { ConnectionBanner } from "@/components/ConnectionBanner";
 import { Screen } from "@/components/Screen";
 import { useEnvironments } from "@/runtime/EnvironmentProvider";
@@ -47,20 +49,6 @@ function progressLabel(event: GitActionProgressEvent): string {
   }
 }
 
-function confirmDefaultBranch(action: GitStackedAction, branch: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    Alert.alert(
-      "Run on default branch?",
-      `This action will update "${branch}". Continue only if that is intentional.`,
-      [
-        { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
-        { text: "Continue", style: "destructive", onPress: () => resolve(true) },
-      ],
-      { cancelable: false }
-    );
-  });
-}
-
 function actionIncludesCommit(action: GitStackedAction): boolean {
   return action === "commit" || action === "commit_push" || action === "commit_push_pr";
 }
@@ -71,6 +59,8 @@ export function GitScreen() {
     threadId?: string | string[];
   }>();
   const router = useRouter();
+  const isDark = useColorScheme() === "dark";
+  const { toast } = useToast();
   const environmentIdRaw = firstParam(params.environmentId);
   const threadIdRaw = firstParam(params.threadId);
   const environmentId = EnvironmentId.make(environmentIdRaw);
@@ -86,6 +76,7 @@ export function GitScreen() {
   const [commitMessage, setCommitMessage] = useState("");
   const [excludedFiles, setExcludedFiles] = useState<ReadonlySet<string>>(new Set());
   const [operationLabel, setOperationLabel] = useState<string | null>(null);
+  const runActionRef = useRef<(input: GitActionRequestInput) => Promise<void>>(async () => {});
 
   const status = git.data;
   const files = status?.workingTree.files ?? [];
@@ -106,15 +97,47 @@ export function GitScreen() {
     [busy, status]
   );
 
+  const confirmDefaultBranch = useCallback(
+    (action: GitStackedAction, branch: string): Promise<boolean> => {
+      if (action === "commit") return Promise.resolve(true);
+      const copy = resolveDefaultBranchActionDialogCopy({
+        action,
+        branchName: branch,
+        includesCommit: actionIncludesCommit(action),
+      });
+      return new Promise((resolve) => {
+        let resolved = false;
+        let toastId = "";
+        toastId = toast.show({
+          variant: "warning",
+          duration: "persistent",
+          label: copy.title,
+          description: copy.description,
+          actionLabel: copy.continueLabel,
+          onActionPress: ({ hide }) => {
+            resolved = true;
+            hide(toastId);
+            resolve(true);
+          },
+          onHide: () => {
+            if (!resolved) resolve(false);
+          },
+        });
+      });
+    },
+    [toast]
+  );
+
   const runAction = useCallback(
     async (input: GitActionRequestInput) => {
       const client = getClient(environmentId);
       if (!client || !cwd || busy) {
         if (!client) {
-          Alert.alert(
-            "Live connection required",
-            "Reconnect the environment before running source-control actions."
-          );
+          toast.show({
+            variant: "danger",
+            label: "Live connection required",
+            description: "Reconnect the environment before running source-control actions.",
+          });
         }
         return;
       }
@@ -148,19 +171,26 @@ export function GitScreen() {
         logStatus("git", "success", result.toast.title, result.toast.description, {
           environmentId,
           inProgress: false,
+          toast: false,
         });
-        const openPrCta = result.toast.cta.kind === "open_pr" ? result.toast.cta : null;
-        Alert.alert(result.toast.title, result.toast.description, [
-          ...(openPrCta
-            ? [
-                {
-                  text: openPrCta.label,
-                  onPress: () => void Linking.openURL(openPrCta.url),
+        const cta = result.toast.cta;
+        toast.show({
+          variant: "success",
+          label: result.toast.title,
+          description: result.toast.description,
+          duration: cta.kind === "none" ? 4000 : 8000,
+          actionLabel: cta.kind === "none" ? undefined : cta.label,
+          onActionPress:
+            cta.kind === "none"
+              ? undefined
+              : () => {
+                  if (cta.kind === "open_pr") {
+                    void Linking.openURL(cta.url);
+                  } else {
+                    void runActionRef.current({ action: cta.action.kind });
+                  }
                 },
-              ]
-            : []),
-          { text: "Done" },
-        ]);
+        });
       } catch (error) {
         logStatus(
           "git",
@@ -169,16 +199,26 @@ export function GitScreen() {
           error instanceof Error ? error.message : "The source-control action failed.",
           { environmentId, phase: "error", inProgress: false }
         );
-        Alert.alert(
-          "Git action failed",
-          error instanceof Error ? error.message : "The source-control action failed."
-        );
       } finally {
         setOperationLabel(null);
       }
     },
-    [busy, cwd, environmentId, getClient, git, status?.isDefaultRef, status?.refName]
+    [
+      busy,
+      confirmDefaultBranch,
+      cwd,
+      environmentId,
+      getClient,
+      git,
+      status?.isDefaultRef,
+      status?.refName,
+      toast,
+    ]
   );
+
+  useEffect(() => {
+    runActionRef.current = runAction;
+  }, [runAction]);
 
   const runQuickAction = useCallback(async () => {
     if (quickAction.kind === "open_pr") {
@@ -189,18 +229,28 @@ export function GitScreen() {
     if (quickAction.kind === "run_pull") {
       const client = getClient(environmentId);
       if (!client || !cwd) {
-        Alert.alert(
-          "Live connection required",
-          "Reconnect the environment before pulling repository changes."
-        );
+        toast.show({
+          variant: "danger",
+          label: "Live connection required",
+          description: "Reconnect the environment before pulling repository changes.",
+        });
         return;
       }
       setOperationLabel("Pulling latest changes");
       try {
         await client.vcs.pull({ cwd });
         await git.refresh();
+        toast.show({
+          variant: "success",
+          label: "Repository updated",
+          description: "Pulled the latest repository changes.",
+        });
       } catch (error) {
-        Alert.alert("Pull failed", error instanceof Error ? error.message : "Unable to pull.");
+        toast.show({
+          variant: "danger",
+          label: "Pull failed",
+          description: error instanceof Error ? error.message : "Unable to pull.",
+        });
       } finally {
         setOperationLabel(null);
       }
@@ -212,7 +262,11 @@ export function GitScreen() {
         files.length > 0 &&
         selectedFiles.length === 0
       ) {
-        Alert.alert("No files selected", "Select at least one changed file before committing.");
+        toast.show({
+          variant: "warning",
+          label: "No files selected",
+          description: "Select at least one changed file before committing.",
+        });
         return;
       }
       await runAction({
@@ -234,14 +288,20 @@ export function GitScreen() {
     runAction,
     selectedFiles,
     status?.pr,
+    toast,
   ]);
 
   return (
     <Screen>
       <View className="flex-row items-center gap-3 border-b border-divider px-4 pb-3 pt-1">
-        <Button size="sm" variant="ghost" onPress={() => router.back()}>
-          Back
-        </Button>
+        <Pressable
+          accessibilityLabel="Go back"
+          accessibilityRole="button"
+          onPress={() => router.back()}
+          className="h-10 w-10 items-center justify-center rounded-full bg-default"
+        >
+          <AppIcon name="back" size={21} color={isDark ? "#f5f5f5" : "#262626"} />
+        </Pressable>
         <View className="flex-1">
           <Text className="text-base font-semibold text-foreground">Source control</Text>
           <Text className="text-xs text-muted" numberOfLines={1}>

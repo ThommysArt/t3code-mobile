@@ -16,6 +16,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon } from "@/components/AppIcon";
+import { ProviderIcon } from "@/components/ProviderIcon";
 import { Screen } from "@/components/Screen";
 import { loadThreadDraft, saveThreadDraft } from "@/runtime/db";
 import { useThread } from "@/runtime/useThread";
@@ -111,9 +112,7 @@ function MessageRow({
     <View className={isUser ? "items-end" : "items-stretch"}>
       <View
         className={
-          isUser
-            ? `${attachments.length > 0 ? "w-[88%]" : "max-w-[88%]"} rounded-[24px] rounded-br-md bg-default px-4 py-3`
-            : "w-full px-1 py-1"
+          isUser ? "w-[80%] rounded-[24px] rounded-br-md bg-default px-4 py-3" : "w-full px-1 py-1"
         }
       >
         {attachments.map((attachment) => {
@@ -463,7 +462,6 @@ export function ThreadScreen() {
           keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"
           automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
-          onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
         >
           {!live && (isCached || dataSource === "http") ? (
             <View className="flex-row items-start gap-3 rounded-2xl border border-border bg-surface px-4 py-3">
@@ -562,9 +560,11 @@ export function ThreadScreen() {
                 onPress={() => setModelSelectorOpen(true)}
                 className="mr-2 flex-1 flex-row items-center gap-2 rounded-full py-2"
               >
-                <View className="h-5 w-5 items-center justify-center rounded bg-default">
-                  <Text className="text-[10px] font-bold text-muted">AI</Text>
-                </View>
+                <ProviderIcon
+                  driver={selectedModelOption?.providerDriver ?? effectiveModel?.instanceId ?? ""}
+                  label={selectedModelOption?.providerLabel ?? effectiveModel?.model ?? "AI"}
+                  size={20}
+                />
                 <Text className="max-w-[70%] text-sm font-semibold text-muted" numberOfLines={1}>
                   {effectiveModel?.model ?? "T3 Code"}
                 </Text>

@@ -4,6 +4,7 @@ import { BottomSheet, SearchField } from "heroui-native";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Pressable, Text, View } from "react-native";
 
+import { ProviderIcon } from "@/components/ProviderIcon";
 import {
   getDescriptorDefaultValue,
   getModelSelectionOption,
@@ -128,7 +129,11 @@ export function ModelSelectorDrawer({
                   }`}
                 >
                   <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-surface">
-                    <Text className="text-xs font-bold text-muted">AI</Text>
+                    <ProviderIcon
+                      driver={option.providerDriver}
+                      label={option.providerLabel}
+                      size={21}
+                    />
                   </View>
                   <Text className="flex-1 text-[15px] font-semibold text-foreground">
                     {option.label}

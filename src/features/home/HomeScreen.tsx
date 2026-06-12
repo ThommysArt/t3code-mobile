@@ -419,9 +419,23 @@ export function HomeScreen() {
                   >
                     {group.title}
                   </Text>
-                  <Text style={{ color: muted, fontSize: 12, fontWeight: "600" }}>
-                    {group.threads.length}
-                  </Text>
+                  {group.threads.length > COLLAPSED_THREAD_LIMIT ? (
+                    <Pressable
+                      hitSlop={10}
+                      onPress={() =>
+                        setExpandedGroups((current) => {
+                          const next = new Set(current);
+                          if (next.has(group.key)) next.delete(group.key);
+                          else next.add(group.key);
+                          return next;
+                        })
+                      }
+                    >
+                      <Text style={{ color: muted, fontSize: 12, fontWeight: "600" }}>
+                        {isExpanded ? "Show less" : `${hiddenCount} more`}
+                      </Text>
+                    </Pressable>
+                  ) : null}
                   {group.project ? (
                     <Pressable
                       accessibilityLabel={`Create thread in ${group.title}`}
@@ -438,23 +452,6 @@ export function HomeScreen() {
                       className="h-7 w-7 items-center justify-center rounded-full bg-default"
                     >
                       <AppIcon name="plus" size={15} color={isDark ? "#d4d4d4" : "#525252"} />
-                    </Pressable>
-                  ) : null}
-                  {group.threads.length > COLLAPSED_THREAD_LIMIT ? (
-                    <Pressable
-                      hitSlop={10}
-                      onPress={() =>
-                        setExpandedGroups((current) => {
-                          const next = new Set(current);
-                          if (next.has(group.key)) next.delete(group.key);
-                          else next.add(group.key);
-                          return next;
-                        })
-                      }
-                    >
-                      <Text style={{ color: muted, fontSize: 12, fontWeight: "600" }}>
-                        {isExpanded ? "Show less" : `${hiddenCount} more`}
-                      </Text>
                     </Pressable>
                   ) : null}
                 </View>

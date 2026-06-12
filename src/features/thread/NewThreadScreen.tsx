@@ -21,6 +21,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon } from "@/components/AppIcon";
+import { ProviderIcon } from "@/components/ProviderIcon";
 import { Screen } from "@/components/Screen";
 import { useEnvironments } from "@/runtime/EnvironmentProvider";
 import { newId } from "@/utils/id";
@@ -210,8 +211,13 @@ export function NewThreadScreen() {
           <View className="flex-row items-center gap-2">
             <Pressable
               onPress={() => setModelDrawerOpen(true)}
-              className="min-w-0 flex-1 rounded-full bg-default px-4 py-3"
+              className="min-w-0 flex-1 flex-row items-center gap-2 rounded-full bg-default px-4 py-3"
             >
+              <ProviderIcon
+                driver={selectedOption?.providerDriver ?? selectedModel?.instanceId ?? ""}
+                label={selectedOption?.providerLabel ?? selectedModel?.model ?? "AI"}
+                size={19}
+              />
               <Text className="text-sm font-semibold text-foreground" numberOfLines={1}>
                 {selectedOption?.label ?? selectedModel?.model ?? "Select model"}
               </Text>
