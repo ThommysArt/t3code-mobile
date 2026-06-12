@@ -23,6 +23,7 @@ const config: ExpoConfig = {
   },
   android: {
     package: "com.t3tools.t3code.mobile",
+    softwareKeyboardLayoutMode: "resize",
     adaptiveIcon: {
       foregroundImage: "./assets/icon.png",
       backgroundColor: "#09090b",

@@ -3,6 +3,7 @@ import {
   CommandId,
   EnvironmentId,
   MessageId,
+  type ModelSelection,
   ThreadId,
   type OrchestrationMessage,
   type OrchestrationThread,
@@ -29,6 +30,7 @@ export interface OptimisticMessage extends OrchestrationMessage {
 interface QueuedSend {
   readonly commandId: CommandId;
   readonly message: OptimisticMessage;
+  readonly modelSelection: ModelSelection;
   readonly targetKey: string;
 }
 
@@ -243,6 +245,7 @@ export function useThread(environmentIdRaw: string, threadIdRaw: string) {
         text: queued.message.text,
         attachments: [],
       },
+      modelSelection: queued.modelSelection,
       runtimeMode: thread.runtimeMode,
       interactionMode: thread.interactionMode,
       createdAt: queued.message.createdAt,
@@ -272,7 +275,7 @@ export function useThread(environmentIdRaw: string, threadIdRaw: string) {
   }, [dispatchCommand, environmentId, isDispatching, queuedSends, state.data, targetKey, threadId]);
 
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (text: string, modelSelection: ModelSelection) => {
       const thread = state.data;
       if (!thread || !text.trim()) return;
       const createdAt = new Date().toISOString();
@@ -295,11 +298,24 @@ export function useThread(environmentIdRaw: string, threadIdRaw: string) {
         {
           commandId: CommandId.make(newId()),
           message: optimistic,
+          modelSelection,
           targetKey,
         },
       ]);
     },
     [state.data, targetKey]
+  );
+  const updateModelSelection = useCallback(
+    async (modelSelection: ModelSelection) => {
+      if (!state.data) return;
+      await dispatchCommand(environmentId, {
+        type: "thread.meta.update",
+        commandId: CommandId.make(newId()),
+        threadId,
+        modelSelection,
+      });
+    },
+    [dispatchCommand, environmentId, state.data, threadId]
   );
   const clearSendError = useCallback(() => setSendError(null), []);
 
@@ -315,9 +331,13 @@ export function useThread(environmentIdRaw: string, threadIdRaw: string) {
     error: state.error,
     sendError,
     sendMessage,
+    updateModelSelection,
     clearSendError,
     refresh: () => reloadThreads(environmentId),
     connectionState: environment?.connectionState ?? "disconnected",
     dataSource: environment?.dataSource ?? "none",
+    serverConfig: environment?.serverConfig ?? null,
+    httpBaseUrl: environment?.connection.httpBaseUrl ?? null,
+    bearerToken: environment?.connection.bearerToken ?? null,
   };
 }

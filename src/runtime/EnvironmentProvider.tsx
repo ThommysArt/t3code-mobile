@@ -22,6 +22,7 @@ import type {
   EnvironmentId,
   OrchestrationReadModel,
   OrchestrationShellSnapshot,
+  ServerConfig,
 } from "@t3tools/contracts";
 import {
   createContext,
@@ -83,6 +84,7 @@ export interface EnvironmentViewState {
   readonly connectionStep: EnvironmentConnectionStep;
   readonly error: string | null;
   readonly snapshot: OrchestrationShellSnapshot | null;
+  readonly serverConfig: ServerConfig | null;
   readonly dataSource: EnvironmentDataSource;
   readonly lastSyncedAt: string | null;
   readonly isCachedSnapshot: boolean;
@@ -603,6 +605,13 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
             }
           );
         },
+        onConfigSnapshot: (serverConfig) => {
+          if (sessionsRef.current.get(environmentId) !== sessionEntry) return;
+          updateEnvironment(environmentId, (current) => ({
+            ...current,
+            serverConfig,
+          }));
+        },
         onShellResubscribe: (eventEnvironmentId) => {
           if (sessionsRef.current.get(eventEnvironmentId) !== sessionEntry) return;
           updateEnvironment(eventEnvironmentId, (current) => ({
@@ -718,6 +727,7 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
                 connectionStep: "checking-server" as const,
                 error: null,
                 snapshot: cached?.snapshot ?? null,
+                serverConfig: null,
                 dataSource: cached ? ("cache" as const) : ("none" as const),
                 lastSyncedAt: cached?.snapshotReceivedAt ?? null,
                 isCachedSnapshot: cached !== undefined,
@@ -813,6 +823,7 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
             connectionStep: "checking-server" as const,
             error: null,
             snapshot: environmentById[connection.environmentId]?.snapshot ?? null,
+            serverConfig: environmentById[connection.environmentId]?.serverConfig ?? null,
             dataSource: environmentById[connection.environmentId]?.dataSource ?? "none",
             lastSyncedAt: environmentById[connection.environmentId]?.lastSyncedAt ?? null,
             isCachedSnapshot: environmentById[connection.environmentId]?.isCachedSnapshot ?? false,

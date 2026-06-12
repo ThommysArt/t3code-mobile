@@ -1,9 +1,11 @@
-import type { OrchestrationMessage, OrchestrationThreadActivity } from "@t3tools/contracts";
+import type { ModelSelection, OrchestrationMessage } from "@t3tools/contracts";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -12,11 +14,15 @@ import {
   useColorScheme,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon } from "@/components/AppIcon";
 import { Screen } from "@/components/Screen";
 import { useThread } from "@/runtime/useThread";
 import { relativeTime } from "@/utils/time";
+import { attachmentHeaders, messageImageUrl } from "./messageAttachments";
+import { buildModelOptions, type ModelOption } from "./modelOptions";
+import { buildThreadFeed, formatWorkDuration, type ThreadFeedEntry } from "./threadFeed";
 
 function firstParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? (value[0] ?? "") : (value ?? "");
@@ -25,15 +31,14 @@ function firstParam(value: string | string[] | undefined): string {
 function InlineText({ value, isUser }: { readonly value: string; readonly isUser: boolean }) {
   const parts = value.split(/(`[^`\n]+`)/g);
   return (
-    <Text
-      selectable
-      className={`text-[15px] leading-6 ${isUser ? "text-white" : "text-foreground"}`}
-    >
+    <Text selectable className="text-[15px] leading-6 text-foreground">
       {parts.map((part, index) =>
         part.startsWith("`") && part.endsWith("`") ? (
           <Text
             key={`${index}:${part}`}
-            className={`font-mono ${isUser ? "bg-black/20 text-white" : "bg-default text-foreground"}`}
+            className={`font-mono ${
+              isUser ? "bg-black/10 text-foreground" : "bg-default text-foreground"
+            }`}
           >
             {part.slice(1, -1)}
           </Text>
@@ -68,6 +73,7 @@ function MessageContent({ text, isUser }: { readonly text: string; readonly isUs
             key={`${index}:code`}
             horizontal
             className="rounded-xl bg-black/90"
+            style={{ flexGrow: 0 }}
             contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 10 }}
           >
             <Text selectable className="font-mono text-[13px] leading-5 text-neutral-200">
@@ -83,23 +89,42 @@ function MessageContent({ text, isUser }: { readonly text: string; readonly isUs
 }
 
 function MessageRow({
+  bearerToken,
+  httpBaseUrl,
   message,
 }: {
+  readonly bearerToken: string | null;
+  readonly httpBaseUrl: string | null;
   readonly message: OrchestrationMessage & { optimistic?: true };
 }) {
   const isUser = message.role === "user";
-  if (!message.text.trim()) return null;
+  const attachments = message.attachments ?? [];
+  if (!message.text.trim() && attachments.length === 0) return null;
+  const headers = attachmentHeaders(bearerToken);
 
   return (
     <View className={isUser ? "items-end" : "items-stretch"}>
       <View
         className={
           isUser
-            ? "max-w-[88%] rounded-[24px] rounded-br-md bg-accent px-4 py-3"
+            ? `${attachments.length > 0 ? "w-[88%]" : "max-w-[88%]"} rounded-[24px] rounded-br-md bg-default px-4 py-3`
             : "w-full px-1 py-1"
         }
       >
-        <MessageContent text={message.text} isUser={isUser} />
+        {message.text.trim() ? <MessageContent text={message.text} isUser={isUser} /> : null}
+        {attachments.map((attachment) => {
+          const uri = messageImageUrl(httpBaseUrl, attachment.id);
+          if (!uri) return null;
+          return (
+            <Image
+              key={attachment.id}
+              accessibilityLabel={attachment.name}
+              source={{ uri, ...(headers ? { headers } : {}) }}
+              className={`${message.text.trim() ? "mt-2.5" : ""} aspect-[1.3] w-full rounded-2xl bg-surface-secondary`}
+              resizeMode="cover"
+            />
+          );
+        })}
       </View>
       <Text className="mt-1 px-1 text-[11px] text-muted">
         {message.optimistic ? "Queued" : relativeTime(message.createdAt)}
@@ -109,19 +134,125 @@ function MessageRow({
   );
 }
 
-function ActivityRow({ activity }: { readonly activity: OrchestrationThreadActivity }) {
+function ModelSelector({
+  options,
+  selected,
+  visible,
+  onClose,
+  onSelect,
+}: {
+  readonly options: readonly ModelOption[];
+  readonly selected: ModelSelection;
+  readonly visible: boolean;
+  readonly onClose: () => void;
+  readonly onSelect: (option: ModelOption) => void;
+}) {
   return (
-    <View className="flex-row gap-3 border-b border-separator px-3 py-3 last:border-b-0">
-      <View className="mt-2 h-2 w-2 rounded-full bg-muted" />
-      <View className="flex-1">
-        <Text className="text-sm font-medium leading-5 text-foreground">{activity.summary}</Text>
-        {"detail" in activity && typeof activity.detail === "string" && activity.detail.trim() ? (
-          <Text className="mt-1 text-xs leading-5 text-muted" numberOfLines={3}>
-            {activity.detail}
-          </Text>
-        ) : null}
-        <Text className="mt-1 text-[11px] text-muted">{relativeTime(activity.createdAt)}</Text>
-      </View>
+    <Modal
+      animationType="slide"
+      transparent
+      visible={visible}
+      onRequestClose={onClose}
+      statusBarTranslucent
+    >
+      <Pressable className="flex-1 justify-end bg-black/40" onPress={onClose}>
+        <Pressable
+          className="max-h-[70%] rounded-t-[28px] border-t border-border bg-background px-4 pb-8 pt-3"
+          onPress={(event) => event.stopPropagation()}
+        >
+          <View className="mb-2 h-1 w-10 self-center rounded-full bg-border" />
+          <Text className="px-2 pb-3 pt-2 text-lg font-bold text-foreground">Select model</Text>
+          <ScrollView>
+            {options.map((option) => {
+              const active =
+                option.selection.instanceId === selected.instanceId &&
+                option.selection.model === selected.model;
+              return (
+                <Pressable
+                  key={option.key}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  onPress={() => onSelect(option)}
+                  className={`mb-1 flex-row items-center rounded-2xl px-3 py-3 ${
+                    active ? "bg-default" : ""
+                  }`}
+                >
+                  <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-surface">
+                    <Text className="text-xs font-bold text-muted">AI</Text>
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-[15px] font-semibold text-foreground">
+                      {option.label}
+                    </Text>
+                    <Text className="mt-0.5 text-xs text-muted">{option.providerLabel}</Text>
+                  </View>
+                  {active ? <View className="h-2.5 w-2.5 rounded-full bg-accent" /> : null}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function WorkLogGroup({
+  entry,
+  expanded,
+  onToggle,
+}: {
+  readonly entry: Extract<ThreadFeedEntry, { type: "work-log" }>;
+  readonly expanded: boolean;
+  readonly onToggle: () => void;
+}) {
+  const isDark = useColorScheme() === "dark";
+
+  return (
+    <View className="overflow-hidden rounded-2xl border border-border bg-surface">
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        onPress={onToggle}
+        className="flex-row items-center gap-2 px-4 py-3"
+      >
+        <Text className="flex-1 text-sm font-medium text-muted">
+          Worked for {formatWorkDuration(entry.startedAt, entry.completedAt)}
+        </Text>
+        <View style={{ transform: [{ rotate: expanded ? "180deg" : "-90deg" }] }}>
+          <AppIcon name="chevron-down" size={16} color={isDark ? "#858585" : "#737373"} />
+        </View>
+      </Pressable>
+      {expanded ? (
+        <View className="border-t border-separator px-3 py-1">
+          {entry.rows.map((row, index) => (
+            <View
+              key={row.id}
+              className={`flex-row gap-3 px-1 py-2.5 ${
+                index > 0 ? "border-t border-separator" : ""
+              }`}
+            >
+              <View
+                className={`mt-1.5 h-2 w-2 rounded-full ${
+                  row.tone === "error"
+                    ? "bg-danger"
+                    : row.tone === "tool"
+                      ? "bg-accent"
+                      : "bg-muted"
+                }`}
+              />
+              <View className="flex-1">
+                <Text className="text-sm leading-5 text-foreground">{row.summary}</Text>
+                {row.detail ? (
+                  <Text selectable className="mt-1 font-mono text-xs leading-5 text-muted">
+                    {row.detail}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -132,6 +263,7 @@ export function ThreadScreen() {
     threadId?: string | string[];
   }>();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const isDark = useColorScheme() === "dark";
   const environmentId = firstParam(params.environmentId);
   const threadId = firstParam(params.threadId);
@@ -141,38 +273,81 @@ export function ThreadScreen() {
     connectionState,
     dataSource,
     error,
+    bearerToken,
+    httpBaseUrl,
     isCached,
     isPending,
     messages,
     refresh,
     sendError,
     sendMessage,
+    serverConfig,
     shell,
     thread,
+    updateModelSelection,
   } = useThread(environmentId, threadId);
   const [draft, setDraft] = useState("");
+  const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<ModelSelection | null>(null);
+  const [modelError, setModelError] = useState<string | null>(null);
+  const [expandedWorkLogs, setExpandedWorkLogs] = useState<ReadonlySet<string>>(new Set());
   const scrollRef = useRef<ScrollView>(null);
-  const activities = useMemo(() => (thread?.activities ?? []).slice(-8), [thread?.activities]);
+  const feed = useMemo(
+    () => buildThreadFeed(messages, thread?.activities ?? []),
+    [messages, thread?.activities]
+  );
   const busy = thread?.session?.status === "running" || thread?.session?.status === "starting";
   const live = connectionState === "ready";
   const canSend = Boolean(thread && draft.trim());
   const statusLabel = live ? "Live" : dataSource === "http" ? "HTTP sync" : "Offline";
   const statusColor = live ? "#22c55e" : dataSource === "http" ? "#f59e0b" : "#737373";
+  const effectiveModel = selectedModel ?? thread?.modelSelection ?? shell?.modelSelection ?? null;
+  const modelOptions = useMemo(
+    () => (effectiveModel ? buildModelOptions(serverConfig, effectiveModel) : []),
+    [effectiveModel, serverConfig]
+  );
 
   useEffect(() => {
     requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: false }));
-  }, [messages.length, thread?.activities.length]);
+  }, [feed.length]);
+
+  useEffect(() => {
+    if (thread?.modelSelection) setSelectedModel(thread.modelSelection);
+  }, [thread?.modelSelection]);
 
   const submit = useCallback(async () => {
     const text = draft.trim();
-    if (!text) return;
+    if (!text || !effectiveModel) return;
     setDraft("");
     clearSendError();
-    await sendMessage(text);
-  }, [clearSendError, draft, sendMessage]);
+    await sendMessage(text, effectiveModel);
+  }, [clearSendError, draft, effectiveModel, sendMessage]);
+
+  const selectModel = useCallback(
+    (option: ModelOption) => {
+      setSelectedModel(option.selection);
+      setModelError(null);
+      setModelSelectorOpen(false);
+      void updateModelSelection(option.selection).catch((selectionError: unknown) => {
+        setModelError(
+          selectionError instanceof Error ? selectionError.message : "Unable to update the model."
+        );
+      });
+    },
+    [updateModelSelection]
+  );
+
+  const toggleWorkLog = useCallback((id: string) => {
+    setExpandedWorkLogs((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   return (
-    <Screen>
+    <Screen edges={["top", "left", "right"]}>
       <View className="flex-row items-center gap-3 border-b border-separator px-3 pb-3 pt-2">
         <Pressable
           onPress={() => router.back()}
@@ -208,7 +383,7 @@ export function ThreadScreen() {
       <KeyboardAvoidingView
         className="flex-1"
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
         <ScrollView
           ref={scrollRef}
@@ -222,6 +397,7 @@ export function ThreadScreen() {
           }}
           keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
           onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
         >
           {!live && (isCached || dataSource === "http") ? (
@@ -271,28 +447,32 @@ export function ThreadScreen() {
             </View>
           ) : null}
 
-          {messages.map((message) => (
-            <MessageRow key={message.id} message={message} />
-          ))}
-
-          {activities.length > 0 ? (
-            <View className="gap-2">
-              <Text className="px-1 text-xs font-bold uppercase tracking-[1px] text-muted">
-                Work log
-              </Text>
-              <View className="overflow-hidden rounded-2xl border border-border bg-surface">
-                {activities.map((activity) => (
-                  <ActivityRow key={activity.id} activity={activity} />
-                ))}
-              </View>
-            </View>
-          ) : null}
+          {feed.map((entry) =>
+            entry.type === "message" ? (
+              <MessageRow
+                key={entry.id}
+                bearerToken={bearerToken}
+                httpBaseUrl={httpBaseUrl}
+                message={entry.message}
+              />
+            ) : (
+              <WorkLogGroup
+                key={entry.id}
+                entry={entry}
+                expanded={expandedWorkLogs.has(entry.id)}
+                onToggle={() => toggleWorkLog(entry.id)}
+              />
+            )
+          )}
         </ScrollView>
 
-        <View className="border-t border-separator bg-background px-3 pb-2 pt-3">
-          {sendError ? (
+        <View
+          className="border-t border-separator bg-background px-3 pt-3"
+          style={{ paddingBottom: Math.max(insets.bottom, 8) }}
+        >
+          {sendError || modelError ? (
             <View className="mb-2 rounded-xl bg-danger-soft px-3 py-2">
-              <Text className="text-xs leading-5 text-danger">{sendError}</Text>
+              <Text className="text-xs leading-5 text-danger">{sendError ?? modelError}</Text>
             </View>
           ) : null}
           <View className="min-h-32 rounded-[28px] border border-border bg-surface px-4 pb-3 pt-3">
@@ -306,15 +486,22 @@ export function ThreadScreen() {
               textAlignVertical="top"
             />
             <View className="mt-2 flex-row items-center">
-              <View className="flex-1 flex-row items-center gap-2">
+              <Pressable
+                accessibilityLabel="Select model"
+                accessibilityRole="button"
+                disabled={!effectiveModel}
+                onPress={() => setModelSelectorOpen(true)}
+                className="mr-2 flex-1 flex-row items-center gap-2 rounded-full py-2"
+              >
                 <View className="h-5 w-5 items-center justify-center rounded bg-default">
                   <Text className="text-[10px] font-bold text-muted">AI</Text>
                 </View>
-                <Text className="text-sm font-semibold text-muted" numberOfLines={1}>
-                  {thread?.modelSelection.model ?? "T3 Code"}
+                <Text className="max-w-[70%] text-sm font-semibold text-muted" numberOfLines={1}>
+                  {effectiveModel?.model ?? "T3 Code"}
                 </Text>
+                <AppIcon name="chevron-down" size={15} color={isDark ? "#858585" : "#737373"} />
                 {busy ? <Text className="text-xs text-warning">Running</Text> : null}
-              </View>
+              </Pressable>
               <Pressable
                 disabled={!canSend}
                 onPress={() => void submit()}
@@ -333,6 +520,15 @@ export function ThreadScreen() {
           </View>
         </View>
       </KeyboardAvoidingView>
+      {effectiveModel ? (
+        <ModelSelector
+          options={modelOptions}
+          selected={effectiveModel}
+          visible={modelSelectorOpen}
+          onClose={() => setModelSelectorOpen(false)}
+          onSelect={selectModel}
+        />
+      ) : null}
     </Screen>
   );
 }
