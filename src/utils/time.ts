@@ -9,3 +9,7 @@ export function relativeTime(value: string): string {
   const days = Math.floor(hours / 24);
   return `${days}d`;
 }
+
+export function formatRelativeTimeLabel(value: string): string {
+  return `${relativeTime(value)} ago`;
+}

@@ -8,6 +8,7 @@ import { StatusBar } from "expo-status-bar";
 import "../global.css";
 import { StatusToastBridge } from "@/components/StatusToastBridge";
 import { EnvironmentProvider } from "@/runtime/EnvironmentProvider";
+import { PreferencesProvider } from "@/runtime/PreferencesProvider";
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -31,11 +32,13 @@ export default function RootLayout() {
             },
           }}
         >
-          <EnvironmentProvider>
-            <StatusToastBridge />
-            <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
-            <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor } }} />
-          </EnvironmentProvider>
+          <PreferencesProvider>
+            <EnvironmentProvider>
+              <StatusToastBridge />
+              <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
+              <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor } }} />
+            </EnvironmentProvider>
+          </PreferencesProvider>
         </HeroUINativeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

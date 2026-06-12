@@ -21,6 +21,18 @@
       "react-native": "./src/remote.ts",
       "import": "./src/remote.ts",
       "default": "./src/remote.ts"
+    },
+    "./model": {
+      "types": "./src/model.ts",
+      "react-native": "./src/model.ts",
+      "import": "./src/model.ts",
+      "default": "./src/model.ts"
+    },
+    "./serverSettings": {
+      "types": "./src/serverSettings.ts",
+      "react-native": "./src/serverSettings.ts",
+      "import": "./src/serverSettings.ts",
+      "default": "./src/serverSettings.ts"
     }
   },
   "dependencies": {

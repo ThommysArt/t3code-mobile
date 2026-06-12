@@ -5,6 +5,7 @@ export type AppIconName =
   | "back"
   | "branch"
   | "chevron-down"
+  | "chevron-right"
   | "compose"
   | "file"
   | "folder"
@@ -87,9 +88,10 @@ export function AppIcon(props: {
         <Rect x="7" y="7" width="10" height="10" rx="1.5" fill={color} />
       ) : props.name === "refresh" ? (
         <>
-          <Path d="M20 7v5h-5" {...common} />
-          <Path d="M4 17v-5h5" {...common} />
-          <Path d="M6.1 8.5A7 7 0 0 1 18.8 7L20 12M4 12l1.2 5A7 7 0 0 0 18 15.5" {...common} />
+          <Path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" {...common} />
+          <Path d="M21 3v5h-5" {...common} />
+          <Path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" {...common} />
+          <Path d="M8 16H3v5" {...common} />
         </>
       ) : props.name === "terminal" ? (
         <>
@@ -105,6 +107,8 @@ export function AppIcon(props: {
           />
           <Circle cx="12" cy="19" r="1" fill={color} />
         </>
+      ) : props.name === "chevron-right" ? (
+        <Polyline points="9 6 15 12 9 18" {...common} />
       ) : (
         <Polyline points="6 9 12 15 18 9" {...common} />
       )}

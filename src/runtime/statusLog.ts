@@ -1,5 +1,15 @@
 import { compactProviderError } from "../utils/providerErrors";
 
+let minimalLoggingEnabled = false;
+
+export function setMinimalLoggingEnabled(enabled: boolean): void {
+  minimalLoggingEnabled = enabled;
+}
+
+export function isMinimalLoggingEnabled(): boolean {
+  return minimalLoggingEnabled;
+}
+
 export type StatusLevel = "info" | "success" | "warning" | "danger";
 
 export type StatusScope = "app" | "db" | "environment" | "shell" | "thread" | "git";
@@ -79,6 +89,25 @@ export function getStatusHistory(): readonly StatusEvent[] {
 export function clearStatusHistory(): void {
   history = [];
   for (const listener of historyListeners) listener();
+}
+
+export function shouldShowStatusToast(event: Pick<StatusEvent, "level" | "phase" | "persistent" | "toast">): boolean {
+  if (event.toast === false) return false;
+  if (!isMinimalLoggingEnabled()) return true;
+  if (event.persistent) return true;
+  if (event.level === "danger") return true;
+  if (event.level === "warning" && (event.phase === "error" || event.phase === "disconnected")) {
+    return true;
+  }
+  return false;
+}
+
+export function shouldShowStatusInPanel(event: Pick<StatusEvent, "level" | "phase" | "persistent">): boolean {
+  if (!isMinimalLoggingEnabled()) return true;
+  if (event.persistent) return true;
+  if (event.level === "danger" || event.level === "warning") return true;
+  if (event.phase === "error" || event.phase === "disconnected") return true;
+  return false;
 }
 
 export function emitStatus(input: StatusEventInput): void {

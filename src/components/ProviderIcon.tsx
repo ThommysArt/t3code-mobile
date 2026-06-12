@@ -26,6 +26,10 @@ const ICONS = {
     light: require("../../assets/provider-icons/opencode-light.svg") as ImageSource,
     dark: require("../../assets/provider-icons/opencode-dark.svg") as ImageSource,
   },
+  grok: {
+    light: require("../../assets/provider-icons/grok-light.svg") as ImageSource,
+    dark: require("../../assets/provider-icons/grok-dark.svg") as ImageSource,
+  },
 } as const;
 
 type IconKey = keyof typeof ICONS;
@@ -38,6 +42,7 @@ function providerIconKey(driver: string, label: string): IconKey | null {
   if (value.includes("gemini") || value.includes("google")) return "gemini";
   if (value.includes("codex")) return "codex";
   if (value.includes("openai") || value.includes("chatgpt")) return "openai";
+  if (value.includes("grok")) return "grok";
   return null;
 }
 

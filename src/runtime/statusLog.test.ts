@@ -6,6 +6,8 @@ import {
   getStatusHistory,
   logStatus,
   sanitizeStatusText,
+  setMinimalLoggingEnabled,
+  shouldShowStatusToast,
 } from "./statusLog";
 
 describe("status logging", () => {
@@ -32,6 +34,30 @@ describe("status logging", () => {
         )
       )
     ).toBe("You've reached your usage limit with OpenAI Codex. Try again at 10:38 PM.");
+  });
+
+  it("filters routine toasts when minimal logging is enabled", () => {
+    setMinimalLoggingEnabled(true);
+    expect(
+      shouldShowStatusToast({
+        level: "info",
+        toast: true,
+      })
+    ).toBe(false);
+    expect(
+      shouldShowStatusToast({
+        level: "danger",
+        toast: true,
+      })
+    ).toBe(true);
+    expect(
+      shouldShowStatusToast({
+        level: "warning",
+        phase: "disconnected",
+        toast: true,
+      })
+    ).toBe(true);
+    setMinimalLoggingEnabled(false);
   });
 
   it("keeps a structured bounded history", () => {

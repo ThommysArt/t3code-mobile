@@ -4,6 +4,7 @@ import { Text, View } from "react-native";
 
 import {
   isStatusInProgress,
+  shouldShowStatusToast,
   subscribeStatus,
   type RuntimeStatusPhase,
   type StatusEvent,
@@ -102,7 +103,7 @@ export function StatusToastBridge() {
 
   useEffect(() => {
     return subscribeStatus((event: StatusEvent) => {
-      if (event.toast === false) {
+      if (!shouldShowStatusToast(event)) {
         return;
       }
 

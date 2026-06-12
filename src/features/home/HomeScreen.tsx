@@ -18,10 +18,9 @@ import {
 import { AppIcon } from "@/components/AppIcon";
 import { Screen } from "@/components/Screen";
 import { useEnvironments } from "@/runtime/EnvironmentProvider";
+import { usePreferences } from "@/runtime/PreferencesProvider";
 import { logStatus } from "@/runtime/statusLog";
 import { relativeTime } from "@/utils/time";
-
-const COLLAPSED_THREAD_LIMIT = 6;
 
 interface ProjectGroup {
   readonly key: string;
@@ -197,6 +196,8 @@ export function HomeScreen() {
   const border = isDark ? "#292929" : "#dedede";
   const background = isDark ? "#090909" : "#f4f4f5";
   const { environments, isBootstrapping, projects, reloadThreads, threads } = useEnvironments();
+  const { preferences } = usePreferences();
+  const collapsedThreadLimit = preferences.sidebarThreadPreviewCount;
   const [search, setSearch] = useState("");
   const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(new Set());
   const hasLoggedViewportRef = useRef(false);
@@ -313,8 +314,8 @@ export function HomeScreen() {
           </View>
         </View>
         <Pressable
-          accessibilityLabel="Open environment settings"
-          onPress={() => router.push("/connections")}
+          accessibilityLabel="Open settings"
+          onPress={() => router.push("/settings")}
           className="h-12 w-12 items-center justify-center rounded-full border border-border bg-surface"
         >
           <AppIcon name="settings" size={24} color={isDark ? "#f5f5f5" : "#262626"} />
@@ -361,10 +362,10 @@ export function HomeScreen() {
               </Text>
             </View>
             <Pressable
-              onPress={() => router.push("/connections")}
+              onPress={() => router.push("/settings/server")}
               className="rounded-full bg-accent px-6 py-3"
             >
-              <Text className="font-semibold text-accent-foreground">Add environment</Text>
+              <Text className="font-semibold text-accent-foreground">Add server</Text>
             </Pressable>
           </View>
         ) : groups.length === 0 ? (
@@ -392,7 +393,7 @@ export function HomeScreen() {
             const isExpanded = expandedGroups.has(group.key);
             const visibleThreads = isExpanded
               ? group.threads
-              : group.threads.slice(0, COLLAPSED_THREAD_LIMIT);
+              : group.threads.slice(0, collapsedThreadLimit);
             const hiddenCount = group.threads.length - visibleThreads.length;
             return (
               <View key={group.key} style={{ gap: 10 }}>
@@ -419,7 +420,7 @@ export function HomeScreen() {
                   >
                     {group.title}
                   </Text>
-                  {group.threads.length > COLLAPSED_THREAD_LIMIT ? (
+                  {group.threads.length > collapsedThreadLimit ? (
                     <Pressable
                       hitSlop={10}
                       onPress={() =>

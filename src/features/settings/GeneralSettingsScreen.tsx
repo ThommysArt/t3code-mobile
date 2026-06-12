@@ -1,0 +1,413 @@
+import type {
+  ModelSelection,
+  ProviderOptionSelectionValue,
+  SidebarThreadPreviewCount,
+  TimestampFormat,
+} from "@t3tools/contracts";
+import {
+  DEFAULT_GIT_TEXT_GENERATION_MODEL,
+  EnvironmentId,
+  ProviderInstanceId,
+} from "@t3tools/contracts";
+import { createModelSelection } from "@t3tools/shared/model";
+import { BottomSheet } from "heroui-native";
+import { useCallback, useMemo, useState } from "react";
+import { Alert, Pressable, Text, View } from "react-native";
+
+import { ConnectionBanner } from "@/components/ConnectionBanner";
+import { Screen } from "@/components/Screen";
+import { usePreferences } from "@/runtime/PreferencesProvider";
+import { usePrimaryEnvironment } from "@/runtime/usePrimaryEnvironment";
+import { useServerSettings } from "@/runtime/useServerSettings";
+import { formatRemoteError } from "@/runtime/statusLog";
+import {
+  buildModelOptions,
+  modelOptionsForConversation,
+  normalizeModelSelection,
+  setModelSelectionOption,
+  thinkingOptionDescriptors,
+  type ModelOption,
+} from "@/features/thread/modelOptions";
+import {
+  ModelSelectorDrawer,
+  ThinkingOptionsDrawer,
+} from "@/features/thread/ComposerSelectors";
+
+import {
+  EnvironmentPicker,
+  SettingsDivider,
+  SettingsLoadingRow,
+  SettingsPickerButton,
+  SettingsRow,
+  SettingsScreenHeader,
+  SettingsScroll,
+  SettingsSection,
+  SettingsSwitch,
+} from "./SettingsComponents";
+
+const TIMESTAMP_FORMAT_OPTIONS: readonly { readonly value: TimestampFormat; readonly label: string }[] =
+  [
+    { value: "locale", label: "System default" },
+    { value: "12-hour", label: "12-hour" },
+    { value: "24-hour", label: "24-hour" },
+  ];
+
+const THREAD_PREVIEW_OPTIONS: readonly {
+  readonly value: SidebarThreadPreviewCount;
+  readonly label: string;
+}[] = [
+  { value: 3, label: "3" },
+  { value: 6, label: "6" },
+  { value: 9, label: "9" },
+  { value: 12, label: "12" },
+  { value: 15, label: "15" },
+];
+
+const THREAD_MODE_OPTIONS = [
+  { value: "local" as const, label: "Local" },
+  { value: "worktree" as const, label: "New worktree" },
+];
+
+function OptionSheet<T extends string | number>(props: {
+  readonly title: string;
+  readonly visible: boolean;
+  readonly options: readonly { readonly value: T; readonly label: string }[];
+  readonly selected: T;
+  readonly onClose: () => void;
+  readonly onSelect: (value: T) => void;
+}) {
+  return (
+    <BottomSheet
+      isOpen={props.visible}
+      onOpenChange={(isOpen) => {
+        if (!isOpen) props.onClose();
+      }}
+    >
+      <BottomSheet.Portal>
+        <BottomSheet.Overlay />
+        <BottomSheet.Content
+          snapPoints={["40%"]}
+          enableDynamicSizing={false}
+          backgroundClassName="bg-background"
+        >
+          <BottomSheet.Title className="px-5 pb-3 pt-1 text-lg font-bold text-foreground">
+            {props.title}
+          </BottomSheet.Title>
+          <View className="gap-1 px-3 pb-6">
+            {props.options.map((option) => {
+              const selected = option.value === props.selected;
+              return (
+                <Pressable
+                  key={String(option.value)}
+                  onPress={() => {
+                    props.onSelect(option.value);
+                    props.onClose();
+                  }}
+                  className={`rounded-2xl px-4 py-3 ${selected ? "bg-accent-soft" : "bg-default"}`}
+                >
+                  <Text
+                    className={`text-base ${selected ? "font-semibold text-accent" : "text-foreground"}`}
+                  >
+                    {option.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </BottomSheet.Content>
+      </BottomSheet.Portal>
+    </BottomSheet>
+  );
+}
+
+export function GeneralSettingsScreen() {
+  const { preferences, updatePreferences } = usePreferences();
+  const { primaryEnvironment, readyEnvironments, selectEnvironment } = usePrimaryEnvironment();
+  const environmentId = primaryEnvironment?.connection.environmentId ?? null;
+  const { settings, isLoading, error, isLive, updateSettings } = useServerSettings(environmentId);
+
+  const [timestampSheetOpen, setTimestampSheetOpen] = useState(false);
+  const [previewSheetOpen, setPreviewSheetOpen] = useState(false);
+  const [threadModeSheetOpen, setThreadModeSheetOpen] = useState(false);
+  const [modelSheetOpen, setModelSheetOpen] = useState(false);
+  const [thinkingSheetOpen, setThinkingSheetOpen] = useState(false);
+
+  const modelOptions = useMemo(
+    () => buildModelOptions(primaryEnvironment?.serverConfig ?? null, settings?.textGenerationModelSelection ?? null),
+    [primaryEnvironment?.serverConfig, settings?.textGenerationModelSelection]
+  );
+
+  const textGenerationSelection = settings?.textGenerationModelSelection ?? null;
+  const selectedModelOption = useMemo(
+    () =>
+      textGenerationSelection
+        ? modelOptions.find(
+            (option) =>
+              option.selection.instanceId === textGenerationSelection.instanceId &&
+              option.selection.model === textGenerationSelection.model
+          ) ?? null
+        : null,
+    [modelOptions, textGenerationSelection]
+  );
+
+  const thinkingDescriptors = thinkingOptionDescriptors(selectedModelOption);
+  const thinkingLabel = useMemo(() => {
+    if (!textGenerationSelection || thinkingDescriptors.length === 0) return null;
+    const descriptor = thinkingDescriptors[0];
+    if (!descriptor || descriptor.type !== "select") return null;
+    const value = textGenerationSelection.options?.find((option) => option.id === descriptor.id)?.value;
+    const option = descriptor.options.find((entry) => entry.id === value);
+    return option?.label ?? String(value ?? "Default");
+  }, [textGenerationSelection, thinkingDescriptors]);
+
+  const updateServerSetting = useCallback(
+    async (patch: Parameters<typeof updateSettings>[0]) => {
+      try {
+        await updateSettings(patch);
+      } catch (updateError) {
+        Alert.alert(
+          "Could not save setting",
+          formatRemoteError(updateError) || "The server rejected the settings update."
+        );
+      }
+    },
+    [updateSettings]
+  );
+
+  const updateTextGenerationModel = useCallback(
+    async (option: ModelOption) => {
+      await updateServerSetting({
+        textGenerationModelSelection: normalizeModelSelection(option.selection),
+      });
+    },
+    [updateServerSetting]
+  );
+
+  const updateThinkingOption = useCallback(
+    async (id: string, value: ProviderOptionSelectionValue) => {
+      if (!textGenerationSelection) return;
+      await updateServerSetting({
+        textGenerationModelSelection: normalizeModelSelection(
+          setModelSelectionOption(textGenerationSelection, id, value)
+        ),
+      });
+    },
+    [textGenerationSelection, updateServerSetting]
+  );
+
+  const timestampLabel =
+    TIMESTAMP_FORMAT_OPTIONS.find((option) => option.value === preferences.timestampFormat)?.label ??
+    "System default";
+
+  return (
+    <Screen>
+      <SettingsScreenHeader title="General" subtitle="Mobile and server preferences" />
+      <SettingsScroll>
+        <EnvironmentPicker
+          environments={readyEnvironments.map((environment) => ({
+            environmentId: environment.connection.environmentId,
+            label: environment.connection.label,
+            connectionState: environment.connectionState,
+          }))}
+          selectedEnvironmentId={environmentId}
+          onSelect={(nextEnvironmentId) =>
+            selectEnvironment(EnvironmentId.make(nextEnvironmentId))
+          }
+        />
+
+        {!isLive && readyEnvironments.length > 0 ? (
+          <ConnectionBanner
+            title="Live connection required"
+            detail="Connect to a server over WebSocket to edit assistant output, new thread defaults, and the text generation model."
+          />
+        ) : null}
+
+        {error ? (
+          <ConnectionBanner title="Server settings unavailable" detail={error} />
+        ) : null}
+
+        <SettingsSection title="General">
+          <SettingsRow
+            title="Time format"
+            description="System default follows your device clock preference."
+            control={
+              <SettingsPickerButton
+                label={timestampLabel}
+                onPress={() => setTimestampSheetOpen(true)}
+              />
+            }
+          />
+          <SettingsDivider />
+          <SettingsRow
+            title="Visible threads"
+            description="How many threads to show per project before expanding."
+            control={
+              <SettingsPickerButton
+                label={String(preferences.sidebarThreadPreviewCount)}
+                onPress={() => setPreviewSheetOpen(true)}
+              />
+            }
+          />
+          <SettingsDivider />
+          <SettingsRow
+            title="Minimal logging"
+            description="Only show important status toasts such as errors and connection issues."
+            control={
+              <SettingsSwitch
+                value={preferences.minimalLogging}
+                onValueChange={(value) => void updatePreferences({ minimalLogging: value })}
+              />
+            }
+          />
+          <SettingsDivider />
+          <SettingsRow
+            title="Archive confirmation"
+            description="Require a second tap before archiving a thread."
+            control={
+              <SettingsSwitch
+                value={preferences.confirmThreadArchive}
+                onValueChange={(value) => void updatePreferences({ confirmThreadArchive: value })}
+              />
+            }
+          />
+          <SettingsDivider />
+          <SettingsRow
+            title="Delete confirmation"
+            description="Ask before deleting a thread and its chat history."
+            control={
+              <SettingsSwitch
+                value={preferences.confirmThreadDelete}
+                onValueChange={(value) => void updatePreferences({ confirmThreadDelete: value })}
+              />
+            }
+          />
+        </SettingsSection>
+
+        <SettingsSection title="Server">
+          {isLoading && !settings ? (
+            <SettingsLoadingRow label="Loading server settings..." />
+          ) : (
+            <>
+              <SettingsRow
+                title="Assistant output"
+                description="Show token-by-token output while a response is in progress."
+                disabled={!isLive || !settings}
+                control={
+                  <SettingsSwitch
+                    disabled={!isLive || !settings}
+                    value={settings?.enableAssistantStreaming ?? false}
+                    onValueChange={(value) =>
+                      void updateServerSetting({ enableAssistantStreaming: value })
+                    }
+                  />
+                }
+              />
+              <SettingsDivider />
+              <SettingsRow
+                title="New threads"
+                description="Default workspace mode for newly created draft threads."
+                disabled={!isLive || !settings}
+                control={
+                  <SettingsPickerButton
+                    disabled={!isLive || !settings}
+                    label={
+                      settings?.defaultThreadEnvMode === "worktree" ? "New worktree" : "Local"
+                    }
+                    onPress={() => setThreadModeSheetOpen(true)}
+                  />
+                }
+              />
+              <SettingsDivider />
+              <SettingsRow
+                layout="stacked"
+                title="Text generation model"
+                description="Model used for generated commit messages, PR titles, and similar Git text."
+                disabled={!isLive || !settings}
+                control={
+                  <View className="flex-col gap-2">
+                    <SettingsPickerButton
+                      fullWidth
+                      disabled={!isLive || !settings || modelOptions.length === 0}
+                      label={selectedModelOption?.label ?? textGenerationSelection?.model ?? "Choose"}
+                      onPress={() => setModelSheetOpen(true)}
+                    />
+                    {thinkingLabel ? (
+                      <SettingsPickerButton
+                        fullWidth
+                        disabled={!isLive || !settings}
+                        label={thinkingLabel}
+                        onPress={() => setThinkingSheetOpen(true)}
+                      />
+                    ) : null}
+                  </View>
+                }
+              />
+            </>
+          )}
+        </SettingsSection>
+      </SettingsScroll>
+
+      <OptionSheet
+        title="Time format"
+        visible={timestampSheetOpen}
+        options={TIMESTAMP_FORMAT_OPTIONS}
+        selected={preferences.timestampFormat}
+        onClose={() => setTimestampSheetOpen(false)}
+        onSelect={(value) => void updatePreferences({ timestampFormat: value })}
+      />
+
+      <OptionSheet
+        title="Visible threads"
+        visible={previewSheetOpen}
+        options={THREAD_PREVIEW_OPTIONS}
+        selected={preferences.sidebarThreadPreviewCount}
+        onClose={() => setPreviewSheetOpen(false)}
+        onSelect={(value) => void updatePreferences({ sidebarThreadPreviewCount: value })}
+      />
+
+      <OptionSheet
+        title="New threads"
+        visible={threadModeSheetOpen}
+        options={THREAD_MODE_OPTIONS}
+        selected={settings?.defaultThreadEnvMode ?? "local"}
+        onClose={() => setThreadModeSheetOpen(false)}
+        onSelect={(value) => void updateServerSetting({ defaultThreadEnvMode: value })}
+      />
+
+      <ModelSelectorDrawer
+        lockedProvider={false}
+        options={modelOptionsForConversation(modelOptions, textGenerationSelection, false)}
+        selected={
+          textGenerationSelection ??
+          createModelSelection(
+            ProviderInstanceId.make("codex"),
+            DEFAULT_GIT_TEXT_GENERATION_MODEL
+          )
+        }
+        visible={modelSheetOpen}
+        onClose={() => setModelSheetOpen(false)}
+        onSelect={(option) => {
+          void updateTextGenerationModel(option);
+          setModelSheetOpen(false);
+        }}
+      />
+
+      <ThinkingOptionsDrawer
+        descriptors={thinkingDescriptors}
+        selection={
+          textGenerationSelection ??
+          createModelSelection(
+            ProviderInstanceId.make("codex"),
+            DEFAULT_GIT_TEXT_GENERATION_MODEL
+          )
+        }
+        visible={thinkingSheetOpen}
+        onClose={() => setThinkingSheetOpen(false)}
+        onSelect={(id, value) => {
+          void updateThinkingOption(id, value);
+          setThinkingSheetOpen(false);
+        }}
+      />
+    </Screen>
+  );
+}

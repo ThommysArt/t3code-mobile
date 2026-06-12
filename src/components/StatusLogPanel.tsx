@@ -4,6 +4,7 @@ import { Pressable, Text, View } from "react-native";
 import {
   clearStatusHistory,
   getStatusHistory,
+  shouldShowStatusInPanel,
   subscribeStatusHistory,
   type StatusEvent,
 } from "@/runtime/statusLog";
@@ -18,7 +19,7 @@ function toneClass(event: StatusEvent): string {
 
 export function StatusLogPanel({ limit = 12 }: { readonly limit?: number }) {
   const events = useSyncExternalStore(subscribeStatusHistory, getStatusHistory, getStatusHistory);
-  const visible = events.slice(-limit).reverse();
+  const visible = events.filter(shouldShowStatusInPanel).slice(-limit).reverse();
 
   return (
     <View className="overflow-hidden rounded-3xl border border-separator bg-surface">
