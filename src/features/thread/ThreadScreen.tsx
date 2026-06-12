@@ -1,9 +1,9 @@
 import type { ModelSelection, OrchestrationMessage } from "@t3tools/contracts";
+import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -21,6 +21,7 @@ import { Screen } from "@/components/Screen";
 import { useThread } from "@/runtime/useThread";
 import { relativeTime } from "@/utils/time";
 import { attachmentHeaders, messageImageUrl } from "./messageAttachments";
+import { MarkdownContent } from "./MarkdownContent";
 import { buildModelOptions, type ModelOption } from "./modelOptions";
 import { buildThreadFeed, formatWorkDuration, type ThreadFeedEntry } from "./threadFeed";
 
@@ -28,61 +29,52 @@ function firstParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? (value[0] ?? "") : (value ?? "");
 }
 
-function InlineText({ value, isUser }: { readonly value: string; readonly isUser: boolean }) {
-  const parts = value.split(/(`[^`\n]+`)/g);
-  return (
-    <Text selectable className="text-[15px] leading-6 text-foreground">
-      {parts.map((part, index) =>
-        part.startsWith("`") && part.endsWith("`") ? (
-          <Text
-            key={`${index}:${part}`}
-            className={`font-mono ${
-              isUser ? "bg-black/10 text-foreground" : "bg-default text-foreground"
-            }`}
-          >
-            {part.slice(1, -1)}
-          </Text>
-        ) : (
-          part
-        )
-      )}
-    </Text>
-  );
-}
-
-function MessageContent({ text, isUser }: { readonly text: string; readonly isUser: boolean }) {
-  const blocks = useMemo(() => {
-    const output: { readonly kind: "text" | "code"; readonly value: string }[] = [];
-    const regex = /```(?:[\w.+-]+)?\n?([\s\S]*?)```/g;
-    let cursor = 0;
-    for (const match of text.matchAll(regex)) {
-      const index = match.index ?? 0;
-      if (index > cursor) output.push({ kind: "text", value: text.slice(cursor, index) });
-      output.push({ kind: "code", value: match[1]?.trimEnd() ?? "" });
-      cursor = index + match[0].length;
-    }
-    if (cursor < text.length) output.push({ kind: "text", value: text.slice(cursor) });
-    return output.length > 0 ? output : [{ kind: "text" as const, value: text }];
-  }, [text]);
+function MessageAttachment({
+  headers,
+  name,
+  uri,
+}: {
+  readonly headers: Readonly<Record<string, string>> | undefined;
+  readonly name: string;
+  readonly uri: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   return (
-    <View className="gap-2.5">
-      {blocks.map((block, index) =>
-        block.kind === "code" ? (
-          <ScrollView
-            key={`${index}:code`}
-            horizontal
-            className="rounded-xl bg-black/90"
-            style={{ flexGrow: 0 }}
-            contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 10 }}
-          >
-            <Text selectable className="font-mono text-[13px] leading-5 text-neutral-200">
-              {block.value}
-            </Text>
-          </ScrollView>
-        ) : block.value.trim() ? (
-          <InlineText key={`${index}:text`} value={block.value.trim()} isUser={isUser} />
-        ) : null
+    <View
+      className="mb-2.5 w-full overflow-hidden rounded-2xl bg-surface-secondary"
+      style={{ aspectRatio: 1.3 }}
+    >
+      {failed ? (
+        <View className="flex-1 items-center justify-center gap-2 px-4">
+          <Text className="text-center text-xs text-muted">Unable to load {name}</Text>
+        </View>
+      ) : (
+        <>
+          <Image
+            accessibilityLabel={name}
+            source={{ uri, ...(headers ? { headers: { ...headers } } : {}) }}
+            cachePolicy="memory-disk"
+            contentFit="cover"
+            transition={150}
+            style={{ height: "100%", width: "100%" }}
+            onLoadStart={() => {
+              setFailed(false);
+              setLoading(true);
+            }}
+            onLoad={() => setLoading(false)}
+            onError={() => {
+              setFailed(true);
+              setLoading(false);
+            }}
+          />
+          {loading ? (
+            <View className="absolute inset-0 items-center justify-center">
+              <ActivityIndicator color="#f97316" />
+            </View>
+          ) : null}
+        </>
       )}
     </View>
   );
@@ -111,20 +103,19 @@ function MessageRow({
             : "w-full px-1 py-1"
         }
       >
-        {message.text.trim() ? <MessageContent text={message.text} isUser={isUser} /> : null}
         {attachments.map((attachment) => {
           const uri = messageImageUrl(httpBaseUrl, attachment.id);
           if (!uri) return null;
           return (
-            <Image
+            <MessageAttachment
               key={attachment.id}
-              accessibilityLabel={attachment.name}
-              source={{ uri, ...(headers ? { headers } : {}) }}
-              className={`${message.text.trim() ? "mt-2.5" : ""} aspect-[1.3] w-full rounded-2xl bg-surface-secondary`}
-              resizeMode="cover"
+              headers={headers}
+              name={attachment.name}
+              uri={uri}
             />
           );
         })}
+        {message.text.trim() ? <MarkdownContent text={message.text} /> : null}
       </View>
       <Text className="mt-1 px-1 text-[11px] text-muted">
         {message.optimistic ? "Queued" : relativeTime(message.createdAt)}
@@ -242,11 +233,11 @@ function WorkLogGroup({
                 }`}
               />
               <View className="flex-1">
-                <Text className="text-sm leading-5 text-foreground">{row.summary}</Text>
+                <MarkdownContent compact text={row.summary} />
                 {row.detail ? (
-                  <Text selectable className="mt-1 font-mono text-xs leading-5 text-muted">
-                    {row.detail}
-                  </Text>
+                  <View className="mt-1">
+                    <MarkdownContent compact text={row.detail} />
+                  </View>
                 ) : null}
               </View>
             </View>
