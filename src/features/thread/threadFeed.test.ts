@@ -1,8 +1,10 @@
 import {
+  CheckpointRef,
   EventId,
   MessageId,
   TurnId,
   type OrchestrationMessage,
+  type OrchestrationCheckpointSummary,
   type OrchestrationThreadActivity,
 } from "@t3tools/contracts";
 import { describe, expect, it } from "vitest";
@@ -93,6 +95,34 @@ describe("buildThreadFeed", () => {
       ],
       startedAt: "2026-06-12T09:59:59.000Z",
       completedAt: "2026-06-12T10:00:04.000Z",
+    });
+  });
+
+  it("places completed file changes after the matching assistant response", () => {
+    const assistant = message("assistant-1", "assistant", "2026-06-12T10:00:03.000Z");
+    const checkpoint: OrchestrationCheckpointSummary = {
+      turnId,
+      checkpointTurnCount: 1,
+      checkpointRef: CheckpointRef.make("checkpoint-1"),
+      status: "ready",
+      files: [
+        { path: "src/app.ts", kind: "modified", additions: 12, deletions: 3 },
+        { path: "src/styles.css", kind: "modified", additions: 4, deletions: 1 },
+      ],
+      assistantMessageId: assistant.id,
+      completedAt: "2026-06-12T10:00:04.000Z",
+    };
+
+    const feed = buildThreadFeed(
+      [message("user-1", "user", "2026-06-12T10:00:00.000Z"), assistant],
+      [],
+      [checkpoint]
+    );
+
+    expect(feed.map((entry) => entry.type)).toEqual(["message", "message", "changed-files"]);
+    expect(feed[2]).toMatchObject({
+      type: "changed-files",
+      checkpoint: { files: [{ path: "src/app.ts" }, { path: "src/styles.css" }] },
     });
   });
 });

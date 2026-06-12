@@ -317,6 +317,23 @@ export function useThread(environmentIdRaw: string, threadIdRaw: string) {
     },
     [dispatchCommand, environmentId, state.data, threadId]
   );
+  const interruptTurn = useCallback(async () => {
+    if (!state.data) return;
+    setSendError(null);
+    try {
+      await dispatchCommand(environmentId, {
+        type: "thread.turn.interrupt",
+        commandId: CommandId.make(newId()),
+        threadId,
+        ...(state.data.latestTurn?.turnId ? { turnId: state.data.latestTurn.turnId } : {}),
+        createdAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to stop the running turn.";
+      setSendError(message);
+      logStatus("thread", "danger", "Stop failed", message, { environmentId });
+    }
+  }, [dispatchCommand, environmentId, state.data, threadId]);
   const clearSendError = useCallback(() => setSendError(null), []);
 
   return {
@@ -331,6 +348,7 @@ export function useThread(environmentIdRaw: string, threadIdRaw: string) {
     error: state.error,
     sendError,
     sendMessage,
+    interruptTurn,
     updateModelSelection,
     clearSendError,
     refresh: () => reloadThreads(environmentId),

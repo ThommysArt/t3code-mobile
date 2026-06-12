@@ -228,6 +228,68 @@ function WorkLogGroup({
   );
 }
 
+function ChangedFilesCard({
+  entry,
+}: {
+  readonly entry: Extract<ThreadFeedEntry, { type: "changed-files" }>;
+}) {
+  const isDark = useColorScheme() === "dark";
+  const [expanded, setExpanded] = useState(false);
+  const files = entry.checkpoint.files;
+  const visibleFiles = expanded ? files : files.slice(0, 5);
+  const additions = files.reduce((total, file) => total + file.additions, 0);
+  const deletions = files.reduce((total, file) => total + file.deletions, 0);
+
+  return (
+    <View className="overflow-hidden rounded-2xl border border-border bg-surface">
+      <View className="flex-row items-center gap-2 border-b border-separator px-4 py-3">
+        <AppIcon name="file" size={16} color={isDark ? "#a3a3a3" : "#525252"} />
+        <Text className="flex-1 text-xs font-bold uppercase tracking-[0.8px] text-muted">
+          Changed files ({files.length})
+        </Text>
+        <Text className="text-xs font-semibold text-success">+{additions}</Text>
+        <Text className="text-xs font-semibold text-danger">-{deletions}</Text>
+      </View>
+      <View className="px-2 py-1.5">
+        {visibleFiles.map((file, index) => {
+          const normalizedPath = file.path.replaceAll("\\", "/");
+          const lastSlash = normalizedPath.lastIndexOf("/");
+          const directory = lastSlash >= 0 ? normalizedPath.slice(0, lastSlash + 1) : "";
+          const name = lastSlash >= 0 ? normalizedPath.slice(lastSlash + 1) : normalizedPath;
+          return (
+            <View
+              key={file.path}
+              className={`flex-row items-center gap-2 rounded-xl px-2 py-2 ${
+                index > 0 ? "border-t border-separator" : ""
+              }`}
+            >
+              <AppIcon name="file" size={14} color={isDark ? "#737373" : "#737373"} />
+              <Text className="min-w-0 flex-1 text-xs text-muted" numberOfLines={1}>
+                {directory}
+                <Text className="font-semibold text-foreground">{name}</Text>
+              </Text>
+              <Text className="text-[11px] font-semibold text-success">+{file.additions}</Text>
+              <Text className="text-[11px] font-semibold text-danger">-{file.deletions}</Text>
+            </View>
+          );
+        })}
+      </View>
+      {files.length > 5 ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ expanded }}
+          onPress={() => setExpanded((current) => !current)}
+          className="items-center border-t border-separator px-3 py-2.5"
+        >
+          <Text className="text-xs font-semibold text-muted">
+            {expanded ? "Show less" : `Show ${files.length - 5} more`}
+          </Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
+
 export function ThreadScreen() {
   const params = useLocalSearchParams<{
     environmentId?: string | string[];
@@ -248,6 +310,7 @@ export function ThreadScreen() {
     httpBaseUrl,
     isCached,
     isPending,
+    interruptTurn,
     messages,
     refresh,
     sendError,
@@ -268,8 +331,8 @@ export function ThreadScreen() {
   const [expandedWorkLogs, setExpandedWorkLogs] = useState<ReadonlySet<string>>(new Set());
   const scrollRef = useRef<ScrollView>(null);
   const feed = useMemo(
-    () => buildThreadFeed(messages, thread?.activities ?? []),
-    [messages, thread?.activities]
+    () => buildThreadFeed(messages, thread?.activities ?? [], thread?.checkpoints ?? []),
+    [messages, thread?.activities, thread?.checkpoints]
   );
   const busy = thread?.session?.status === "running" || thread?.session?.status === "starting";
   const live = connectionState === "ready";
@@ -518,13 +581,15 @@ export function ThreadScreen() {
                 httpBaseUrl={httpBaseUrl}
                 message={entry.message}
               />
-            ) : (
+            ) : entry.type === "work-log" ? (
               <WorkLogGroup
                 key={entry.id}
                 entry={entry}
                 expanded={expandedWorkLogs.has(entry.id)}
                 onToggle={() => toggleWorkLog(entry.id)}
               />
+            ) : (
+              <ChangedFilesCard key={entry.id} entry={entry} />
             )
           )}
         </ScrollView>
@@ -569,7 +634,6 @@ export function ThreadScreen() {
                   {effectiveModel?.model ?? "T3 Code"}
                 </Text>
                 <AppIcon name="chevron-down" size={15} color={isDark ? "#858585" : "#737373"} />
-                {busy ? <Text className="text-xs text-warning">Running</Text> : null}
               </Pressable>
               <Pressable
                 accessibilityLabel="Thinking options"
@@ -583,17 +647,19 @@ export function ThreadScreen() {
                 </Text>
               </Pressable>
               <Pressable
-                disabled={!canSend}
-                onPress={() => void submit()}
-                className={`h-11 w-11 items-center justify-center rounded-full ${
-                  canSend ? "bg-accent" : "bg-default"
+                accessibilityLabel={busy ? "Stop running agent" : "Send message"}
+                accessibilityRole="button"
+                disabled={!busy && !canSend}
+                onPress={() => void (busy ? interruptTurn() : submit())}
+                className={`h-9 w-9 items-center justify-center rounded-full ${
+                  busy ? "bg-danger" : canSend ? "bg-accent" : "bg-default"
                 }`}
               >
                 <AppIcon
-                  name="arrow-up"
-                  size={21}
-                  color={canSend ? "#ffffff" : isDark ? "#737373" : "#a3a3a3"}
-                  strokeWidth={2.4}
+                  name={busy ? "stop" : "arrow-up"}
+                  size={busy ? 17 : 18}
+                  color={busy || canSend ? "#ffffff" : isDark ? "#737373" : "#a3a3a3"}
+                  strokeWidth={2.3}
                 />
               </Pressable>
             </View>

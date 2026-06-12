@@ -6,12 +6,14 @@ export type AppIconName =
   | "branch"
   | "chevron-down"
   | "compose"
+  | "file"
   | "folder"
   | "git"
   | "plus"
   | "refresh"
   | "search"
   | "settings"
+  | "stop"
   | "terminal"
   | "wifi";
 
@@ -44,6 +46,11 @@ export function AppIcon(props: {
         </>
       ) : props.name === "folder" ? (
         <Path d="M3 6.5h6l2 2h10v9.5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z" {...common} />
+      ) : props.name === "file" ? (
+        <>
+          <Path d="M6 3h8l4 4v14H6Z" {...common} />
+          <Polyline points="14 3 14 8 19 8" {...common} />
+        </>
       ) : props.name === "branch" || props.name === "git" ? (
         <>
           <Circle cx="6" cy="5" r="2" {...common} />
@@ -76,6 +83,8 @@ export function AppIcon(props: {
           <Line x1="12" y1="5" x2="12" y2="19" {...common} />
           <Line x1="5" y1="12" x2="19" y2="12" {...common} />
         </>
+      ) : props.name === "stop" ? (
+        <Rect x="7" y="7" width="10" height="10" rx="1.5" fill={color} />
       ) : props.name === "refresh" ? (
         <>
           <Path d="M20 7v5h-5" {...common} />

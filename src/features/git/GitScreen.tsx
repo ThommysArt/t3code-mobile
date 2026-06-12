@@ -13,7 +13,7 @@ import {
   type GitStackedAction,
 } from "@t3tools/contracts";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Button, Card, Checkbox, Chip, Input, useToast } from "heroui-native";
+import { Button, Card, Chip, Input, useToast } from "heroui-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Linking, Pressable, ScrollView, Text, useColorScheme, View } from "react-native";
 
@@ -75,12 +75,17 @@ export function GitScreen() {
   const git = useVcsStatus(environmentId, cwd);
   const [commitMessage, setCommitMessage] = useState("");
   const [excludedFiles, setExcludedFiles] = useState<ReadonlySet<string>>(new Set());
+  const [isEditingFiles, setIsEditingFiles] = useState(false);
   const [operationLabel, setOperationLabel] = useState<string | null>(null);
   const runActionRef = useRef<(input: GitActionRequestInput) => Promise<void>>(async () => {});
 
   const status = git.data;
   const files = status?.workingTree.files ?? [];
   const selectedFiles = files.filter((file) => !excludedFiles.has(file.path));
+  const selectedInsertions = selectedFiles.reduce((total, file) => total + file.insertions, 0);
+  const selectedDeletions = selectedFiles.reduce((total, file) => total + file.deletions, 0);
+  const selectedFilePreview = selectedFiles.slice(0, 3);
+  const allFilesSelected = excludedFiles.size === 0;
   const busy = operationLabel !== null;
   const menuItems = useMemo(
     () => buildMenuItems(status, busy, status?.hasPrimaryRemote ?? false),
@@ -368,38 +373,118 @@ export function GitScreen() {
 
         {files.length > 0 ? (
           <Card>
-            <Card.Body className="gap-3">
-              <View>
-                <Card.Title>Changed files</Card.Title>
-                <Card.Description>
-                  Choose which files are included when committing.
-                </Card.Description>
-              </View>
-              {files.map((file) => {
-                const selected = !excludedFiles.has(file.path);
-                return (
-                  <Checkbox
-                    key={file.path}
-                    isSelected={selected}
-                    onSelectedChange={() =>
-                      setExcludedFiles((current) => {
-                        const next = new Set(current);
-                        if (selected) next.add(file.path);
-                        else next.delete(file.path);
-                        return next;
-                      })
-                    }
+            <Card.Body className="gap-4">
+              <View className="flex-row items-center justify-between gap-3">
+                <View className="min-w-0 flex-1 gap-1">
+                  <Card.Title>Files</Card.Title>
+                  <Card.Description>
+                    {selectedFiles.length} selected · +{selectedInsertions} / -{selectedDeletions}
+                  </Card.Description>
+                </View>
+                <View className="flex-row items-center gap-2">
+                  {!allFilesSelected && isEditingFiles ? (
+                    <Pressable
+                      onPress={() => setExcludedFiles(new Set())}
+                      className="rounded-full bg-default px-3 py-2"
+                    >
+                      <Text className="text-[11px] font-bold uppercase text-foreground">Reset</Text>
+                    </Pressable>
+                  ) : null}
+                  <Pressable
+                    onPress={() => setIsEditingFiles((current) => !current)}
+                    className="rounded-full bg-default px-3 py-2"
                   >
-                    <View className="flex-1 flex-row items-center gap-2">
-                      <Text className="flex-1 text-sm text-foreground" numberOfLines={1}>
+                    <Text className="text-[11px] font-bold uppercase text-foreground">
+                      {isEditingFiles ? "Done" : "Edit"}
+                    </Text>
+                  </Pressable>
+                </View>
+              </View>
+
+              {!isEditingFiles ? (
+                <View className="gap-2">
+                  {selectedFilePreview.map((file) => (
+                    <View key={file.path} className="flex-row items-center gap-3 py-1">
+                      <View className="h-8 w-8 items-center justify-center rounded-lg bg-default">
+                        <AppIcon name="file" size={15} color={isDark ? "#a3a3a3" : "#525252"} />
+                      </View>
+                      <Text
+                        className="min-w-0 flex-1 text-sm font-medium text-foreground"
+                        numberOfLines={1}
+                      >
                         {file.path}
                       </Text>
-                      <Text className="text-xs font-medium text-success">+{file.insertions}</Text>
-                      <Text className="text-xs font-medium text-danger">-{file.deletions}</Text>
+                      <Text className="text-xs font-bold text-success">+{file.insertions}</Text>
+                      <Text className="text-xs font-bold text-danger">-{file.deletions}</Text>
                     </View>
-                  </Checkbox>
-                );
-              })}
+                  ))}
+                  {selectedFiles.length > selectedFilePreview.length ? (
+                    <Text className="text-xs text-muted">
+                      +{selectedFiles.length - selectedFilePreview.length} more files
+                    </Text>
+                  ) : null}
+                  {selectedFiles.length === 0 ? (
+                    <Text className="text-sm leading-5 text-muted">
+                      No files selected for the next commit.
+                    </Text>
+                  ) : null}
+                </View>
+              ) : (
+                <View className="gap-2">
+                  {files.map((file) => {
+                    const included = !excludedFiles.has(file.path);
+                    return (
+                      <Pressable
+                        key={file.path}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: included }}
+                        onPress={() =>
+                          setExcludedFiles((current) => {
+                            const next = new Set(current);
+                            if (included) next.add(file.path);
+                            else next.delete(file.path);
+                            return next;
+                          })
+                        }
+                        className={`rounded-2xl border px-4 py-3 ${
+                          included ? "border-border bg-surface" : "border-separator bg-default"
+                        }`}
+                      >
+                        <View className="flex-row items-start gap-3">
+                          <View
+                            className={`mt-0.5 h-5 w-5 items-center justify-center rounded-md border ${
+                              included ? "border-accent bg-accent" : "border-border bg-background"
+                            }`}
+                          >
+                            {included ? (
+                              <Text className="text-xs font-bold text-white">✓</Text>
+                            ) : null}
+                          </View>
+                          <View className="min-w-0 flex-1 gap-1">
+                            <Text
+                              selectable
+                              className={`text-sm font-semibold ${
+                                included ? "text-foreground" : "text-muted"
+                              }`}
+                            >
+                              {file.path}
+                            </Text>
+                            {!included ? (
+                              <Text className="text-xs text-muted">Excluded from this commit</Text>
+                            ) : null}
+                          </View>
+                          <View className="items-end gap-1">
+                            <Text className="text-xs font-bold text-success">
+                              +{file.insertions}
+                            </Text>
+                            <Text className="text-xs font-bold text-danger">-{file.deletions}</Text>
+                          </View>
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              )}
             </Card.Body>
           </Card>
         ) : null}

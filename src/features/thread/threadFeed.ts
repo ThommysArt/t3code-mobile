@@ -1,4 +1,9 @@
-import type { OrchestrationMessage, OrchestrationThreadActivity, TurnId } from "@t3tools/contracts";
+import type {
+  OrchestrationCheckpointSummary,
+  OrchestrationMessage,
+  OrchestrationThreadActivity,
+  TurnId,
+} from "@t3tools/contracts";
 
 export interface WorkLogRow {
   readonly id: string;
@@ -21,6 +26,11 @@ export type ThreadFeedEntry =
       readonly rows: readonly WorkLogRow[];
       readonly startedAt: string;
       readonly completedAt: string;
+    }
+  | {
+      readonly type: "changed-files";
+      readonly id: string;
+      readonly checkpoint: OrchestrationCheckpointSummary;
     };
 
 function payloadRecord(activity: OrchestrationThreadActivity): Record<string, unknown> | null {
@@ -81,7 +91,8 @@ function collapseRows(rows: readonly WorkLogRow[]): WorkLogRow[] {
 
 export function buildThreadFeed(
   messages: readonly OrchestrationMessage[],
-  activities: readonly OrchestrationThreadActivity[]
+  activities: readonly OrchestrationThreadActivity[],
+  checkpoints: readonly OrchestrationCheckpointSummary[] = []
 ): ThreadFeedEntry[] {
   const activityGroups = new Map<TurnId | null, OrchestrationThreadActivity[]>();
   for (const activity of activities) {
@@ -100,6 +111,10 @@ export function buildThreadFeed(
 
   const feed: ThreadFeedEntry[] = [];
   const emittedTurns = new Set<TurnId | null>();
+  const emittedCheckpoints = new Set<TurnId>();
+  const visibleCheckpoints = checkpoints
+    .filter((checkpoint) => checkpoint.status === "ready" && checkpoint.files.length > 0)
+    .sort((left, right) => left.completedAt.localeCompare(right.completedAt));
   const orderedMessages = [...messages].sort((left, right) =>
     left.createdAt.localeCompare(right.createdAt)
   );
@@ -126,10 +141,33 @@ export function buildThreadFeed(
       emitWorkLog(message.turnId);
     }
     feed.push({ type: "message", id: message.id, message });
+    if (message.role === "assistant") {
+      const checkpoint = visibleCheckpoints.find(
+        (candidate) =>
+          !emittedCheckpoints.has(candidate.turnId) &&
+          (candidate.assistantMessageId === message.id || candidate.turnId === message.turnId)
+      );
+      if (checkpoint) {
+        emittedCheckpoints.add(checkpoint.turnId);
+        feed.push({
+          type: "changed-files",
+          id: `changes:${checkpoint.turnId}`,
+          checkpoint,
+        });
+      }
+    }
   }
 
   for (const [turnId] of activityGroups) {
     emitWorkLog(turnId);
+  }
+  for (const checkpoint of visibleCheckpoints) {
+    if (emittedCheckpoints.has(checkpoint.turnId)) continue;
+    feed.push({
+      type: "changed-files",
+      id: `changes:${checkpoint.turnId}`,
+      checkpoint,
+    });
   }
 
   return feed;
