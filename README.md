@@ -110,6 +110,14 @@ If a saved connection stops authenticating, open **Environments**, tap **Re-pair
 pairing code, and pair again. The connection log now checks server reachability and session
 validity before attempting WebSocket bootstrap.
 
+Each saved environment also exposes an editable **Connection URL** with a **Save connection**
+button. Saving verifies that the new URL belongs to the same environment before replacing it.
+
+Connection diagnostics report checking the server, validating the saved session, opening the
+WebSocket, receiving the shell snapshot, publishing the thread catalog, and updating the Home
+catalog as separate steps. A successful WebSocket connection does not start the expensive HTTP
+full-history fallback.
+
 ## Validation
 
 ```sh

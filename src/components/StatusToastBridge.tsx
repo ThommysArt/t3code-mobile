@@ -10,7 +10,6 @@ import {
   type StatusLevel,
 } from "@/runtime/statusLog";
 
-const PERSISTENT_STATUS_ID = "t3-runtime-status";
 const ICON_BOX_SIZE = 20;
 
 function toastVariant(level: StatusLevel): "default" | "accent" | "success" | "warning" | "danger" {
@@ -99,6 +98,7 @@ function StatusToastIcon({ event }: { readonly event: StatusEvent }) {
 export function StatusToastBridge() {
   const { toast } = useToast();
   const lastPersistentKeyRef = useRef<string | null>(null);
+  const activeStatusToastIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     return subscribeStatus((event: StatusEvent) => {
@@ -109,19 +109,29 @@ export function StatusToastBridge() {
       const icon = <StatusToastIcon event={event} />;
 
       if (event.persistent) {
+        const inProgress = isStatusInProgress(event);
         const label = phaseLabel(event.phase, event.label);
-        const key = `${event.environmentId ?? "app"}:${event.phase ?? "none"}:${isStatusInProgress(event) ? "progress" : "done"}:${label}:${event.description ?? ""}`;
+        const key = `${event.environmentId ?? "app"}:${event.phase ?? "none"}:${inProgress ? "progress" : "done"}:${label}:${event.description ?? ""}`;
         if (lastPersistentKeyRef.current === key) {
           return;
         }
         lastPersistentKeyRef.current = key;
-        toast.show({
-          id: PERSISTENT_STATUS_ID,
-          duration: "persistent",
+
+        if (activeStatusToastIdRef.current) {
+          toast.hide(activeStatusToastIdRef.current);
+          activeStatusToastIdRef.current = null;
+        }
+
+        activeStatusToastIdRef.current = toast.show({
+          duration: inProgress ? "persistent" : 3000,
           variant: toastVariant(event.level),
           label,
           description: event.description,
           icon,
+          onHide: () => {
+            activeStatusToastIdRef.current = null;
+            if (!inProgress) lastPersistentKeyRef.current = null;
+          },
         });
         return;
       }

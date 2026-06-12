@@ -260,6 +260,7 @@ export function GitScreen() {
 
       <ScrollView
         className="flex-1"
+        style={{ flex: 1 }}
         contentContainerClassName="gap-4 px-4 pb-10 pt-4"
         keyboardShouldPersistTaps="handled"
       >

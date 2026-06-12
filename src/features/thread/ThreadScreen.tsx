@@ -207,11 +207,13 @@ export function ThreadScreen() {
 
       <KeyboardAvoidingView
         className="flex-1"
+        style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <ScrollView
           ref={scrollRef}
           className="flex-1"
+          style={{ flex: 1 }}
           contentContainerStyle={{
             gap: 22,
             paddingHorizontal: 18,

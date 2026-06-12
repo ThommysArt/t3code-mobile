@@ -3,9 +3,10 @@ import type {
   EnvironmentScopedThreadShell,
 } from "@t3tools/client-runtime";
 import { useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  type LayoutChangeEvent,
   Pressable,
   ScrollView,
   Text,
@@ -17,6 +18,7 @@ import {
 import { AppIcon } from "@/components/AppIcon";
 import { Screen } from "@/components/Screen";
 import { useEnvironments } from "@/runtime/EnvironmentProvider";
+import { logStatus } from "@/runtime/statusLog";
 import { relativeTime } from "@/utils/time";
 
 const COLLAPSED_THREAD_LIMIT = 6;
@@ -30,6 +32,25 @@ interface ProjectGroup {
 
 function scopedProjectKey(environmentId: string, projectId: string): string {
   return `${environmentId}:${projectId}`;
+}
+
+function connectionStepLabel(step: string): string {
+  switch (step) {
+    case "checking-server":
+      return "Checking server";
+    case "validating-session":
+      return "Validating session";
+    case "opening-websocket":
+      return "Opening WebSocket";
+    case "syncing-threads":
+      return "Syncing threads";
+    case "refreshing-http":
+      return "Refreshing";
+    case "http-ready":
+      return "HTTP sync";
+    default:
+      return "Offline";
+  }
 }
 
 function statusTone(
@@ -82,6 +103,8 @@ function ThreadRow(props: {
 }) {
   const tone = statusTone(props.thread, props.isDark);
   const muted = props.isDark ? "#737373" : "#737373";
+  const foreground = props.isDark ? "#f5f5f5" : "#171717";
+  const separator = props.isDark ? "#282828" : "#dedede";
   const iconColor =
     props.thread.session?.status === "running" || props.thread.session?.status === "starting"
       ? "#f97316"
@@ -92,11 +115,24 @@ function ThreadRow(props: {
   return (
     <Pressable onPress={props.onPress} style={({ pressed }) => ({ opacity: pressed ? 0.66 : 1 })}>
       <View
-        className={`flex-row gap-3 px-4 py-3.5 ${props.isLast ? "" : "border-b border-separator"}`}
+        style={{
+          minHeight: 76,
+          flexDirection: "row",
+          gap: 12,
+          paddingHorizontal: 16,
+          paddingVertical: 14,
+          borderBottomWidth: props.isLast ? 0 : 1,
+          borderBottomColor: separator,
+        }}
       >
         <View
-          className="mt-0.5 h-10 w-10 items-center justify-center rounded-xl"
           style={{
+            width: 40,
+            height: 40,
+            marginTop: 2,
+            alignItems: "center",
+            justifyContent: "center",
+            borderRadius: 12,
             backgroundColor:
               props.thread.session?.status === "running"
                 ? "#362012"
@@ -107,29 +143,42 @@ function ThreadRow(props: {
         >
           <AppIcon name="branch" size={18} color={iconColor} strokeWidth={1.8} />
         </View>
-        <View className="flex-1 gap-1">
-          <View className="flex-row items-center gap-2">
+        <View style={{ flex: 1, gap: 4 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
             <Text
-              className="flex-1 text-[16px] font-bold leading-6 text-foreground"
+              style={{
+                flex: 1,
+                color: foreground,
+                fontSize: 16,
+                fontWeight: "700",
+                lineHeight: 24,
+              }}
               numberOfLines={1}
             >
               {props.thread.title}
             </Text>
             <View
-              className="rounded-full px-2 py-1"
-              style={{ backgroundColor: tone.backgroundColor }}
+              style={{
+                borderRadius: 999,
+                paddingHorizontal: 8,
+                paddingVertical: 4,
+                backgroundColor: tone.backgroundColor,
+              }}
             >
-              <Text className="text-[11px] font-semibold" style={{ color: tone.foregroundColor }}>
+              <Text style={{ color: tone.foregroundColor, fontSize: 11, fontWeight: "600" }}>
                 {tone.label}
               </Text>
             </View>
-            <Text className="w-8 text-right text-xs" style={{ color: muted }}>
+            <Text style={{ width: 34, color: muted, fontSize: 12, textAlign: "right" }}>
               {relativeTime(props.thread.updatedAt ?? props.thread.createdAt)}
             </Text>
           </View>
-          <View className="flex-row items-center gap-1.5">
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
             <AppIcon name="branch" size={12} color={muted} strokeWidth={1.7} />
-            <Text className="flex-1 font-mono text-xs text-muted" numberOfLines={1}>
+            <Text
+              style={{ flex: 1, color: muted, fontFamily: "monospace", fontSize: 12 }}
+              numberOfLines={1}
+            >
               {props.thread.branch ?? "main"}
             </Text>
           </View>
@@ -142,9 +191,15 @@ function ThreadRow(props: {
 export function HomeScreen() {
   const router = useRouter();
   const isDark = useColorScheme() === "dark";
+  const foreground = isDark ? "#f5f5f5" : "#171717";
+  const muted = isDark ? "#858585" : "#737373";
+  const surface = isDark ? "#171717" : "#ffffff";
+  const border = isDark ? "#292929" : "#dedede";
+  const background = isDark ? "#090909" : "#f4f4f5";
   const { environments, isBootstrapping, projects, reloadThreads, threads } = useEnvironments();
   const [search, setSearch] = useState("");
   const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(new Set());
+  const hasLoggedViewportRef = useRef(false);
 
   const groups = useMemo<readonly ProjectGroup[]>(() => {
     const query = search.trim().toLowerCase();
@@ -197,10 +252,48 @@ export function HomeScreen() {
     (environment) =>
       environment.connectionState === "connecting" || environment.connectionState === "reconnecting"
   );
+  const activeStep = environments.find(
+    (environment) => environment.connectionState !== "ready"
+  )?.connectionStep;
   const connectionLabel =
-    readyCount > 0 ? "Live" : hasHttpData ? "HTTP sync" : hasCachedData ? "Cached" : "Offline";
+    readyCount > 0
+      ? "Live"
+      : activeStep && activeStep !== "offline"
+        ? connectionStepLabel(activeStep)
+        : hasHttpData
+          ? "HTTP sync"
+          : hasCachedData
+            ? "Cached"
+            : "Offline";
   const connectionColor =
     readyCount > 0 ? "#22c55e" : hasHttpData ? "#f59e0b" : isConnecting ? "#60a5fa" : "#737373";
+
+  useEffect(() => {
+    if (environments.length === 0) return;
+    logStatus(
+      "shell",
+      "success",
+      "Home catalog updated",
+      `${threads.length} visible threads in ${groups.length} project groups`,
+      { toast: false }
+    );
+  }, [environments.length, groups.length, threads.length]);
+
+  const handleCatalogLayout = useCallback(
+    (event: LayoutChangeEvent) => {
+      if (groups.length === 0 || hasLoggedViewportRef.current) return;
+      hasLoggedViewportRef.current = true;
+      const { height, width } = event.nativeEvent.layout;
+      logStatus(
+        "shell",
+        height > 0 && width > 0 ? "success" : "danger",
+        "Thread list viewport ready",
+        `${Math.round(width)}x${Math.round(height)} for ${groups.length} project groups`,
+        { toast: false }
+      );
+    },
+    [groups.length]
+  );
 
   return (
     <Screen>
@@ -234,7 +327,8 @@ export function HomeScreen() {
       ) : null}
 
       <ScrollView
-        className="flex-1"
+        onLayout={handleCatalogLayout}
+        style={{ flex: 1, width: "100%", backgroundColor: background }}
         contentContainerStyle={{
           gap: 24,
           paddingHorizontal: 16,
@@ -295,11 +389,26 @@ export function HomeScreen() {
               : group.threads.slice(0, COLLAPSED_THREAD_LIMIT);
             const hiddenCount = group.threads.length - visibleThreads.length;
             return (
-              <View key={group.key} className="gap-2.5">
-                <View className="flex-row items-center gap-2 px-2">
-                  <AppIcon name="folder" size={16} color={isDark ? "#858585" : "#737373"} />
+              <View key={group.key} style={{ gap: 10 }}>
+                <View
+                  style={{
+                    minHeight: 24,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 8,
+                    paddingHorizontal: 8,
+                  }}
+                >
+                  <AppIcon name="folder" size={16} color={muted} />
                   <Text
-                    className="flex-1 text-[13px] font-bold uppercase tracking-[0.8px] text-muted"
+                    style={{
+                      flex: 1,
+                      color: muted,
+                      fontSize: 13,
+                      fontWeight: "700",
+                      letterSpacing: 0.8,
+                      textTransform: "uppercase",
+                    }}
                     numberOfLines={1}
                   >
                     {group.title}
@@ -316,15 +425,25 @@ export function HomeScreen() {
                         })
                       }
                     >
-                      <Text className="text-xs font-semibold text-muted">
+                      <Text style={{ color: muted, fontSize: 12, fontWeight: "600" }}>
                         {isExpanded ? "Show less" : `${hiddenCount} more`}
                       </Text>
                     </Pressable>
                   ) : (
-                    <Text className="text-xs font-semibold text-muted">{group.threads.length}</Text>
+                    <Text style={{ color: muted, fontSize: 12, fontWeight: "600" }}>
+                      {group.threads.length}
+                    </Text>
                   )}
                 </View>
-                <View className="overflow-hidden rounded-[28px] border border-border bg-surface">
+                <View
+                  style={{
+                    overflow: "hidden",
+                    borderRadius: 28,
+                    borderWidth: 1,
+                    borderColor: border,
+                    backgroundColor: surface,
+                  }}
+                >
                   {visibleThreads.map((thread, index) => (
                     <ThreadRow
                       key={`${thread.environmentId}:${thread.id}`}
@@ -349,8 +468,35 @@ export function HomeScreen() {
         )}
       </ScrollView>
 
-      <View className="absolute bottom-0 left-0 right-0 flex-row items-center gap-3 bg-background px-5 pb-3 pt-2">
-        <View className="h-14 flex-1 flex-row items-center gap-3 rounded-full border border-border bg-surface px-4">
+      <View
+        style={{
+          position: "absolute",
+          right: 0,
+          bottom: 0,
+          left: 0,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 12,
+          paddingHorizontal: 20,
+          paddingTop: 8,
+          paddingBottom: 12,
+          backgroundColor: background,
+        }}
+      >
+        <View
+          style={{
+            height: 56,
+            flex: 1,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 12,
+            borderRadius: 999,
+            borderWidth: 1,
+            borderColor: border,
+            backgroundColor: surface,
+            paddingHorizontal: 16,
+          }}
+        >
           <AppIcon name="search" size={22} color={isDark ? "#d4d4d4" : "#525252"} />
           <TextInput
             value={search}
@@ -358,13 +504,23 @@ export function HomeScreen() {
             placeholder="Search threads"
             placeholderTextColor={isDark ? "#858585" : "#8a8a8a"}
             returnKeyType="search"
-            className="flex-1 text-[16px] text-foreground"
+            style={{ flex: 1, color: foreground, fontSize: 16 }}
           />
         </View>
         <Pressable
           accessibilityLabel="Refresh threads"
           onPress={() => void reloadThreads()}
-          className="h-14 w-14 items-center justify-center rounded-full border border-border bg-surface"
+          style={({ pressed }) => ({
+            width: 56,
+            height: 56,
+            alignItems: "center",
+            justifyContent: "center",
+            borderRadius: 999,
+            borderWidth: 1,
+            borderColor: border,
+            backgroundColor: surface,
+            opacity: pressed ? 0.66 : 1,
+          })}
         >
           <AppIcon name="refresh" size={23} color={isDark ? "#f5f5f5" : "#262626"} />
         </Pressable>

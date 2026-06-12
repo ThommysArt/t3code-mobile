@@ -58,11 +58,38 @@ function connectionTone(state: string, dataSource: string, isDark: boolean) {
   };
 }
 
+function connectionStepLabel(step: string): string {
+  switch (step) {
+    case "checking-server":
+      return "Checking server";
+    case "validating-session":
+      return "Validating session";
+    case "opening-websocket":
+      return "Opening WebSocket";
+    case "syncing-threads":
+      return "Syncing threads";
+    case "refreshing-http":
+      return "Refreshing HTTP data";
+    case "ready":
+      return "Live sync ready";
+    case "http-ready":
+      return "HTTP data ready";
+    default:
+      return "Offline";
+  }
+}
+
 export default function ConnectionsScreen() {
   const router = useRouter();
   const isDark = useColorScheme() === "dark";
-  const { addConnection, environments, reconnect, reloadThreads, removeConnection } =
-    useEnvironments();
+  const {
+    addConnection,
+    environments,
+    reconnect,
+    reloadThreads,
+    removeConnection,
+    updateConnectionUrl,
+  } = useEnvironments();
   const [serverUrl, setServerUrl] = useState("");
   const [pairingCode, setPairingCode] = useState("");
   const [isLoadingDraft, setIsLoadingDraft] = useState(true);
@@ -70,6 +97,13 @@ export default function ConnectionsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [showScanner, setShowScanner] = useState(false);
   const [scannerLocked, setScannerLocked] = useState(false);
+  const [urlDraftByEnvironment, setUrlDraftByEnvironment] = useState<
+    Readonly<Record<string, string>>
+  >({});
+  const [savingEnvironmentId, setSavingEnvironmentId] = useState<string | null>(null);
+  const [saveErrorByEnvironment, setSaveErrorByEnvironment] = useState<
+    Readonly<Record<string, string>>
+  >({});
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const scrollRef = useRef<ScrollView>(null);
   const palette = isDark
@@ -88,6 +122,16 @@ export default function ConnectionsScreen() {
       })
       .finally(() => setIsLoadingDraft(false));
   }, []);
+
+  useEffect(() => {
+    setUrlDraftByEnvironment((current) => {
+      const next = { ...current };
+      for (const environment of environments) {
+        next[environment.connection.environmentId] ??= environment.connection.httpBaseUrl;
+      }
+      return next;
+    });
+  }, [environments]);
 
   const connect = useCallback(
     async (scannedPairingUrl?: string) => {
@@ -174,6 +218,27 @@ export default function ConnectionsScreen() {
     ]);
   };
 
+  const saveConnectionUrl = useCallback(
+    async (environmentId: EnvironmentId) => {
+      const rawUrl = urlDraftByEnvironment[environmentId]?.trim() ?? "";
+      if (!rawUrl || savingEnvironmentId) return;
+      setSavingEnvironmentId(environmentId);
+      setSaveErrorByEnvironment((current) => ({ ...current, [environmentId]: "" }));
+      try {
+        await updateConnectionUrl(environmentId, rawUrl);
+      } catch (saveError) {
+        setSaveErrorByEnvironment((current) => ({
+          ...current,
+          [environmentId]:
+            saveError instanceof Error ? saveError.message : "Unable to save the connection URL.",
+        }));
+      } finally {
+        setSavingEnvironmentId(null);
+      }
+    },
+    [savingEnvironmentId, updateConnectionUrl, urlDraftByEnvironment]
+  );
+
   return (
     <Screen>
       <View className="flex-row items-center gap-3 border-b border-separator px-3 pb-3 pt-2">
@@ -200,8 +265,9 @@ export default function ConnectionsScreen() {
       <ScrollView
         ref={scrollRef}
         className="flex-1"
-        style={{ backgroundColor: palette.background }}
+        style={{ flex: 1, backgroundColor: palette.background }}
         contentContainerStyle={{
+          flexGrow: 1,
           gap: 20,
           paddingHorizontal: 16,
           paddingBottom: 40,
@@ -386,6 +452,71 @@ export default function ConnectionsScreen() {
                         synced {relativeTime(environment.lastSyncedAt)}
                       </Text>
                     ) : null}
+                  </View>
+
+                  <View className="gap-2">
+                    <Text className="text-xs font-bold uppercase tracking-[0.8px] text-muted">
+                      Connection URL
+                    </Text>
+                    <TextInput
+                      value={
+                        urlDraftByEnvironment[environment.connection.environmentId] ??
+                        environment.connection.httpBaseUrl
+                      }
+                      onChangeText={(value) =>
+                        setUrlDraftByEnvironment((current) => ({
+                          ...current,
+                          [environment.connection.environmentId]: value,
+                        }))
+                      }
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      keyboardType="url"
+                      placeholder="100.100.10.20:3773"
+                      placeholderTextColor={isDark ? "#737373" : "#9a9a9a"}
+                      className="rounded-2xl border border-border px-4 py-3 text-[15px] text-foreground"
+                      style={{
+                        minHeight: 52,
+                        backgroundColor: palette.input,
+                        borderColor: palette.border,
+                        color: isDark ? "#f5f5f5" : "#171717",
+                      }}
+                    />
+                    <Text className="text-xs text-muted">
+                      {connectionStepLabel(environment.connectionStep)}
+                    </Text>
+                    {saveErrorByEnvironment[environment.connection.environmentId] ? (
+                      <Text className="text-xs leading-5 text-danger">
+                        {saveErrorByEnvironment[environment.connection.environmentId]}
+                      </Text>
+                    ) : null}
+                    <Pressable
+                      disabled={
+                        savingEnvironmentId !== null ||
+                        !(
+                          urlDraftByEnvironment[environment.connection.environmentId] ??
+                          environment.connection.httpBaseUrl
+                        ).trim()
+                      }
+                      onPress={() => void saveConnectionUrl(environment.connection.environmentId)}
+                      className={`h-12 items-center justify-center rounded-full ${
+                        savingEnvironmentId === environment.connection.environmentId
+                          ? "bg-default"
+                          : "bg-accent"
+                      }`}
+                    >
+                      <Text
+                        className={`font-semibold ${
+                          savingEnvironmentId === environment.connection.environmentId
+                            ? "text-muted"
+                            : "text-accent-foreground"
+                        }`}
+                      >
+                        {savingEnvironmentId === environment.connection.environmentId
+                          ? "Saving..."
+                          : "Save connection"}
+                      </Text>
+                    </Pressable>
                   </View>
 
                   {environment.error ? (

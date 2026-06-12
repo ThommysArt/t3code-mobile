@@ -7,7 +7,7 @@ export function Screen({ children }: PropsWithChildren) {
   return (
     <SafeAreaView
       className="flex-1 bg-background"
-      style={{ backgroundColor: isDark ? "#090909" : "#f4f4f5" }}
+      style={{ flex: 1, backgroundColor: isDark ? "#090909" : "#f4f4f5" }}
     >
       {children}
     </SafeAreaView>

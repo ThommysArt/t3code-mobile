@@ -9,8 +9,6 @@ import {
   fetchRemoteOrchestrationSnapshot,
   fetchRemoteSessionState,
   resolveRemoteWebSocketConnectionUrl,
-  scopeProjectShell,
-  scopeThreadShell,
   toShellSnapshot,
   WsTransport,
   type EnvironmentConnection,
@@ -50,10 +48,16 @@ import {
   saveCachedShellSnapshot,
   saveCachedThreadDetail,
 } from "./db";
+import { buildScopedCatalog } from "./catalog";
 import { effectRuntime } from "./effectRuntime";
 import { formatRemoteError, logStatus } from "./statusLog";
 import { loadConnections, saveConnections } from "./storage";
-import { shouldUseHttpForHost } from "@/utils/network";
+import {
+  normalizeHostInput,
+  normalizeHttpBaseUrl,
+  normalizeWsBaseUrl,
+  shouldUseHttpForHost,
+} from "@/utils/network";
 
 const HTTP_REQUEST_TIMEOUT_MS = 30_000;
 const CONNECTION_PROBE_TIMEOUT_MS = 8_000;
@@ -63,10 +67,20 @@ const HTTP_POLL_MAX_DURATION_MS = 5 * 60_000;
 
 export type EnvironmentConnectionState = "connecting" | "ready" | "reconnecting" | "disconnected";
 export type EnvironmentDataSource = "live" | "http" | "cache" | "none";
+export type EnvironmentConnectionStep =
+  | "checking-server"
+  | "validating-session"
+  | "opening-websocket"
+  | "syncing-threads"
+  | "ready"
+  | "refreshing-http"
+  | "http-ready"
+  | "offline";
 
 export interface EnvironmentViewState {
   readonly connection: SavedConnection;
   readonly connectionState: EnvironmentConnectionState;
+  readonly connectionStep: EnvironmentConnectionStep;
   readonly error: string | null;
   readonly snapshot: OrchestrationShellSnapshot | null;
   readonly dataSource: EnvironmentDataSource;
@@ -87,6 +101,7 @@ interface EnvironmentContextValue {
   readonly projects: readonly EnvironmentScopedProjectShell[];
   readonly threads: readonly EnvironmentScopedThreadShell[];
   readonly addConnection: (input: ConnectionInput) => Promise<void>;
+  readonly updateConnectionUrl: (environmentId: EnvironmentId, rawUrl: string) => Promise<void>;
   readonly removeConnection: (environmentId: EnvironmentId) => Promise<void>;
   readonly reconnect: (environmentId: EnvironmentId) => Promise<void>;
   readonly reloadThreads: (environmentId?: EnvironmentId) => Promise<void>;
@@ -118,10 +133,6 @@ function unreachableEnvironmentMessage(connection: SavedConnection, error: unkno
   const host = new URL(connection.httpBaseUrl).hostname;
   if (!shouldUseHttpForHost(host)) return detail;
   return `This phone could not reach ${connection.httpBaseUrl} over Tailscale or the local network. Confirm Tailscale is connected on the phone and use a development build for plain HTTP servers.`;
-}
-
-function isActiveThread(thread: { readonly archivedAt: string | null }): boolean {
-  return thread.archivedAt == null;
 }
 
 function hasRunningThread(readModel: OrchestrationReadModel): boolean {
@@ -180,16 +191,15 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
       update: (current: EnvironmentViewState) => EnvironmentViewState
     ) => {
       if (!mountedRef.current) return;
-      setEnvironmentById((current) => {
-        const environment = current[environmentId];
-        if (!environment) return current;
-        const next = {
-          ...current,
-          [environmentId]: update(environment),
-        };
-        environmentByIdRef.current = next;
-        return next;
-      });
+      const current = environmentByIdRef.current;
+      const environment = current[environmentId];
+      if (!environment) return;
+      const next = {
+        ...current,
+        [environmentId]: update(environment),
+      };
+      environmentByIdRef.current = next;
+      setEnvironmentById(next);
     },
     []
   );
@@ -216,14 +226,27 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
           persistent: true,
         });
       }
+      updateEnvironment(savedConnection.environmentId, (current) => ({
+        ...current,
+        connectionStep: "refreshing-http",
+      }));
 
-      const readModel = await effectRuntime.runPromise(
-        fetchRemoteOrchestrationSnapshot({
-          httpBaseUrl: savedConnection.httpBaseUrl,
-          bearerToken: savedConnection.bearerToken,
-          timeoutMs: HTTP_REQUEST_TIMEOUT_MS,
-        })
-      );
+      let readModel: OrchestrationReadModel;
+      try {
+        readModel = await effectRuntime.runPromise(
+          fetchRemoteOrchestrationSnapshot({
+            httpBaseUrl: savedConnection.httpBaseUrl,
+            bearerToken: savedConnection.bearerToken,
+            timeoutMs: HTTP_REQUEST_TIMEOUT_MS,
+          })
+        );
+      } catch (error) {
+        updateEnvironment(savedConnection.environmentId, (current) => ({
+          ...current,
+          connectionStep: current.connectionState === "ready" ? "ready" : "offline",
+        }));
+        throw error;
+      }
       await persistReadModel(savedConnection.environmentId, readModel);
       const snapshot = toShellSnapshot(readModel);
       const receivedAt = new Date().toISOString();
@@ -241,6 +264,7 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
           ...current,
           snapshot,
           dataSource: isLive ? "live" : "http",
+          connectionStep: isLive ? "ready" : "http-ready",
           lastSyncedAt: receivedAt,
           isCachedSnapshot: false,
           cachedSnapshotReceivedAt: null,
@@ -350,12 +374,12 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
       logStatus(
         "environment",
         "info",
-        reconnecting ? "Reconnecting" : "Connecting",
+        reconnecting ? "Restoring connection" : "Connecting",
         `${savedConnection.label} (${savedConnection.displayUrl})`,
         {
           environmentId,
           persistent: true,
-          phase: reconnecting ? "reconnecting" : "connecting",
+          phase: "connecting",
           inProgress: true,
         }
       );
@@ -363,17 +387,34 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
         ...current,
         connection: savedConnection,
         connectionState: reconnecting ? "reconnecting" : "connecting",
+        connectionStep: "checking-server",
         error: null,
         sessionRevision: current.sessionRevision + 1,
       }));
 
       try {
+        logStatus("environment", "info", "Checking server", savedConnection.httpBaseUrl, {
+          environmentId,
+          toast: false,
+        });
         await effectRuntime.runPromise(
           fetchRemoteEnvironmentDescriptor({
             httpBaseUrl: savedConnection.httpBaseUrl,
             timeoutMs: CONNECTION_PROBE_TIMEOUT_MS,
           })
         );
+        logStatus("environment", "success", "Server reachable", savedConnection.httpBaseUrl, {
+          environmentId,
+          toast: false,
+        });
+        updateEnvironment(environmentId, (current) => ({
+          ...current,
+          connectionStep: "validating-session",
+        }));
+        logStatus("environment", "info", "Validating saved session", savedConnection.label, {
+          environmentId,
+          toast: false,
+        });
         await effectRuntime.runPromise(
           fetchRemoteSessionState({
             httpBaseUrl: savedConnection.httpBaseUrl,
@@ -381,7 +422,7 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
             timeoutMs: CONNECTION_PROBE_TIMEOUT_MS,
           })
         );
-        logStatus("environment", "success", "Server reachable", savedConnection.httpBaseUrl, {
+        logStatus("environment", "success", "Saved session valid", savedConnection.label, {
           environmentId,
           toast: false,
         });
@@ -393,6 +434,7 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
         updateEnvironment(environmentId, (current) => ({
           ...current,
           connectionState: "disconnected",
+          connectionStep: "offline",
           error: message,
           dataSource: current.snapshot ? "cache" : "none",
           sessionRevision: current.sessionRevision + 1,
@@ -425,6 +467,10 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
         {
           onAttempt: () => {
             if (!isCurrentAttempt()) return;
+            updateEnvironment(environmentId, (current) => ({
+              ...current,
+              connectionStep: "opening-websocket",
+            }));
             logStatus("environment", "info", "Opening WebSocket", savedConnection.label, {
               environmentId,
               toast: false,
@@ -432,6 +478,10 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
           },
           onOpen: () => {
             if (!isCurrentAttempt()) return;
+            updateEnvironment(environmentId, (current) => ({
+              ...current,
+              connectionStep: "syncing-threads",
+            }));
             logStatus("environment", "info", "WebSocket opened", savedConnection.label, {
               environmentId,
               toast: false,
@@ -450,6 +500,7 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
             updateEnvironment(environmentId, (current) => ({
               ...current,
               connectionState: "disconnected",
+              connectionStep: "offline",
               error: detail,
               dataSource: current.snapshot ? current.dataSource : "none",
               sessionRevision: current.sessionRevision + 1,
@@ -513,11 +564,25 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
         syncShellSnapshot: (snapshot, eventEnvironmentId) => {
           if (sessionsRef.current.get(eventEnvironmentId) !== sessionEntry) return;
           stopHttpPolling(eventEnvironmentId);
+          const activeThreadCount = countActiveThreads(snapshot);
+          logStatus(
+            "shell",
+            "info",
+            "Shell snapshot received",
+            `${activeThreadCount} active threads, ${snapshot.projects.length} projects`,
+            {
+              environmentId: eventEnvironmentId,
+              phase: "syncing",
+              inProgress: true,
+              toast: false,
+            }
+          );
           void saveCachedShellSnapshot(eventEnvironmentId, snapshot);
           updateEnvironment(eventEnvironmentId, (current) => ({
             ...current,
             snapshot,
             connectionState: "ready",
+            connectionStep: "ready",
             error: null,
             dataSource: "live",
             lastSyncedAt: new Date().toISOString(),
@@ -528,8 +593,8 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
           logStatus(
             "shell",
             "success",
-            "Live sync ready",
-            `${countActiveThreads(snapshot)} threads, ${snapshot.projects.length} projects`,
+            "Thread catalog ready",
+            `${activeThreadCount} visible threads, ${snapshot.projects.length} projects`,
             {
               environmentId: eventEnvironmentId,
               persistent: true,
@@ -542,10 +607,11 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
           if (sessionsRef.current.get(eventEnvironmentId) !== sessionEntry) return;
           updateEnvironment(eventEnvironmentId, (current) => ({
             ...current,
-            connectionState: "reconnecting",
+            connectionState: current.snapshot ? "ready" : "reconnecting",
+            connectionStep: "syncing-threads",
             sessionRevision: current.sessionRevision + 1,
           }));
-          logStatus("shell", "info", "Resubscribing live data", savedConnection.label, {
+          logStatus("shell", "info", "Refreshing live thread stream", savedConnection.label, {
             environmentId: eventEnvironmentId,
             toast: false,
           });
@@ -559,20 +625,16 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
       }
       sessionsRef.current.set(environmentId, sessionEntry);
 
-      const httpSnapshotPromise = syncHttpSnapshot(savedConnection, {
-        quiet: true,
-        reason: "Connection bootstrap",
-      }).catch((error: unknown) => {
-        logStatus("shell", "warning", "HTTP snapshot unavailable", formatRemoteError(error), {
-          environmentId,
-          toast: false,
-        });
-        return null;
-      });
-
       try {
         await withTimeout(environmentConnection.ensureBootstrapped(), WS_BOOTSTRAP_TIMEOUT_MS);
         if (!isCurrentAttempt()) return;
+        updateEnvironment(environmentId, (current) => ({
+          ...current,
+          connectionState: "ready",
+          connectionStep: "ready",
+          error: null,
+          dataSource: "live",
+        }));
         logStatus("environment", "success", "Connected", savedConnection.label, {
           environmentId,
           persistent: true,
@@ -583,11 +645,27 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
         if (!isCurrentAttempt()) return;
         sessionsRef.current.delete(environmentId);
         await environmentConnection.dispose().catch(() => undefined);
-        const readModel = await httpSnapshotPromise;
+        logStatus("shell", "info", "Trying HTTP thread fallback", savedConnection.label, {
+          environmentId,
+          phase: "syncing",
+          inProgress: true,
+          toast: false,
+        });
+        const readModel = await syncHttpSnapshot(savedConnection, {
+          quiet: true,
+          reason: "WebSocket fallback",
+        }).catch((httpError: unknown) => {
+          logStatus("shell", "warning", "HTTP fallback unavailable", formatRemoteError(httpError), {
+            environmentId,
+            toast: false,
+          });
+          return null;
+        });
         const message = errorMessage(error, "Failed to connect to the live thread stream.");
         updateEnvironment(environmentId, (current) => ({
           ...current,
           connectionState: "disconnected",
+          connectionStep: readModel ? "http-ready" : "offline",
           error: message,
           dataSource: readModel ? "http" : current.snapshot ? current.dataSource : "none",
           sessionRevision: current.sessionRevision + 1,
@@ -637,6 +715,7 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
                 connectionState: (cached
                   ? "reconnecting"
                   : "connecting") as EnvironmentConnectionState,
+                connectionStep: "checking-server" as const,
                 error: null,
                 snapshot: cached?.snapshot ?? null,
                 dataSource: cached ? ("cache" as const) : ("none" as const),
@@ -672,8 +751,22 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
       if (nextState !== "active" || !wasInactive) return;
 
       for (const savedConnection of savedConnectionsRef.current) {
+        const environment = environmentByIdRef.current[savedConnection.environmentId];
+        if (
+          environment?.connectionState === "connecting" ||
+          environment?.connectionState === "reconnecting"
+        ) {
+          continue;
+        }
         const session = sessions.get(savedConnection.environmentId);
-        if (!session?.client.isHeartbeatFresh()) {
+        const lastSyncedAt = environment?.lastSyncedAt
+          ? Date.parse(environment.lastSyncedAt)
+          : Number.NEGATIVE_INFINITY;
+        const recentlySynced = Date.now() - lastSyncedAt < 15_000;
+        if (
+          environment?.connectionState === "disconnected" ||
+          (!recentlySynced && !session?.client.isHeartbeatFresh())
+        ) {
           void connectSaved(savedConnection);
         }
       }
@@ -717,6 +810,7 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
           [connection.environmentId]: {
             connection,
             connectionState: "connecting" as const,
+            connectionStep: "checking-server" as const,
             error: null,
             snapshot: environmentById[connection.environmentId]?.snapshot ?? null,
             dataSource: environmentById[connection.environmentId]?.dataSource ?? "none",
@@ -733,6 +827,58 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
       await connectSaved(connection);
     },
     [connectSaved]
+  );
+
+  const updateConnectionUrl = useCallback(
+    async (environmentId: EnvironmentId, rawUrl: string) => {
+      const current = savedConnectionsRef.current.find(
+        (connection) => connection.environmentId === environmentId
+      );
+      if (!current) throw new Error("Saved environment not found.");
+
+      const normalizedInput = normalizeHostInput(rawUrl);
+      const httpBaseUrl = normalizeHttpBaseUrl(normalizedInput);
+      const wsBaseUrl = normalizeWsBaseUrl(normalizedInput);
+      logStatus("environment", "info", "Checking updated server URL", httpBaseUrl, {
+        environmentId,
+        phase: "connecting",
+        inProgress: true,
+      });
+      const descriptor = await effectRuntime.runPromise(
+        fetchRemoteEnvironmentDescriptor({
+          httpBaseUrl,
+          timeoutMs: CONNECTION_PROBE_TIMEOUT_MS,
+        })
+      );
+      if (descriptor.environmentId !== environmentId) {
+        throw new Error(
+          `That URL belongs to ${descriptor.label}, not the saved ${current.label} environment.`
+        );
+      }
+
+      const updated = normalizeSavedConnection({
+        ...current,
+        label: descriptor.label,
+        displayUrl: httpBaseUrl,
+        httpBaseUrl,
+        wsBaseUrl,
+      });
+      const nextConnections = savedConnectionsRef.current.map((connection) =>
+        connection.environmentId === environmentId ? updated : connection
+      );
+      await saveConnections(nextConnections);
+      savedConnectionsRef.current = nextConnections;
+      updateEnvironment(environmentId, (environment) => ({
+        ...environment,
+        connection: updated,
+        connectionStep: "checking-server",
+      }));
+      logStatus("environment", "success", "Server URL saved", httpBaseUrl, {
+        environmentId,
+      });
+      await connectSaved(updated);
+    },
+    [connectSaved, updateEnvironment]
   );
 
   const removeConnection = useCallback(
@@ -780,6 +926,29 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
           )
         : savedConnectionsRef.current;
       for (const connection of targets) {
+        const environment = environmentByIdRef.current[connection.environmentId];
+        const session = sessionsRef.current.get(connection.environmentId);
+        if (environment?.connectionState === "ready" && session) {
+          updateEnvironment(connection.environmentId, (current) => ({
+            ...current,
+            connectionStep: "syncing-threads",
+          }));
+          logStatus("shell", "info", "Refreshing live threads", connection.label, {
+            environmentId: connection.environmentId,
+            phase: "syncing",
+            inProgress: true,
+          });
+          try {
+            await withTimeout(session.connection.reconnect(), WS_BOOTSTRAP_TIMEOUT_MS);
+            continue;
+          } catch (error) {
+            logStatus("shell", "warning", "Live refresh failed", formatRemoteError(error), {
+              environmentId: connection.environmentId,
+              toast: false,
+            });
+          }
+        }
+
         try {
           await syncHttpSnapshot(connection, { reason: "Manual refresh" });
         } catch (error) {
@@ -795,7 +964,7 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
         }
       }
     },
-    [connectSaved, syncHttpSnapshot]
+    [connectSaved, syncHttpSnapshot, updateEnvironment]
   );
 
   const dispatchCommand = useCallback(
@@ -861,31 +1030,18 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
     [environmentById]
   );
 
-  const projects = useMemo(
+  const catalog = useMemo(
     () =>
-      environments
-        .flatMap((environment) =>
-          (environment.snapshot?.projects ?? []).map((project) =>
-            scopeProjectShell(environment.connection.environmentId, project)
-          )
-        )
-        .sort((left, right) => left.title.localeCompare(right.title)),
+      buildScopedCatalog(
+        environments.map((environment) => ({
+          environmentId: environment.connection.environmentId,
+          snapshot: environment.snapshot,
+        }))
+      ),
     [environments]
   );
-
-  const threads = useMemo(
-    () =>
-      environments
-        .flatMap((environment) =>
-          (environment.snapshot?.threads ?? [])
-            .filter(isActiveThread)
-            .map((thread) => scopeThreadShell(environment.connection.environmentId, thread))
-        )
-        .sort((left, right) =>
-          (right.updatedAt ?? right.createdAt).localeCompare(left.updatedAt ?? left.createdAt)
-        ),
-    [environments]
-  );
+  const projects = catalog.projects;
+  const threads = catalog.threads;
 
   const getEnvironment = useCallback(
     (environmentId: EnvironmentId) => environmentById[environmentId] ?? null,
@@ -899,6 +1055,7 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
       projects,
       threads,
       addConnection,
+      updateConnectionUrl,
       removeConnection,
       reconnect,
       reloadThreads,
@@ -918,6 +1075,7 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
       reloadThreads,
       removeConnection,
       threads,
+      updateConnectionUrl,
     ]
   );
 
