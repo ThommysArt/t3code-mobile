@@ -20,8 +20,13 @@ export default function RootLayout() {
           config={{
             toast: {
               defaultProps: {
-                placement: "bottom",
+                placement: "top",
                 isSwipeable: true,
+              },
+              insets: {
+                top: 64,
+                left: 12,
+                right: 12,
               },
             },
           }}

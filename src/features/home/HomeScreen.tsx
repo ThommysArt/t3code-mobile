@@ -206,18 +206,14 @@ export function HomeScreen() {
     const projectByKey = new Map(
       projects.map((project) => [scopedProjectKey(project.environmentId, project.id), project])
     );
-    const grouped = new Map<string, EnvironmentScopedThreadShell[]>();
+    const grouped = new Map<string, EnvironmentScopedThreadShell[]>(
+      projects.map((project) => [
+        scopedProjectKey(project.environmentId, project.id),
+        [] as EnvironmentScopedThreadShell[],
+      ])
+    );
 
     for (const thread of threads) {
-      const project = projectByKey.get(scopedProjectKey(thread.environmentId, thread.projectId));
-      if (
-        query &&
-        !thread.title.toLowerCase().includes(query) &&
-        !(thread.branch?.toLowerCase().includes(query) ?? false) &&
-        !(project?.title.toLowerCase().includes(query) ?? false)
-      ) {
-        continue;
-      }
       const key = scopedProjectKey(thread.environmentId, thread.projectId);
       const existing = grouped.get(key);
       if (existing) existing.push(thread);
@@ -236,6 +232,16 @@ export function HomeScreen() {
           ),
         };
       })
+      .filter(
+        (group) =>
+          !query ||
+          group.title.toLowerCase().includes(query) ||
+          group.threads.some(
+            (thread) =>
+              thread.title.toLowerCase().includes(query) ||
+              (thread.branch?.toLowerCase().includes(query) ?? false)
+          )
+      )
       .sort((left, right) => {
         const leftDate = left.threads[0]?.updatedAt ?? left.threads[0]?.createdAt ?? "";
         const rightDate = right.threads[0]?.updatedAt ?? right.threads[0]?.createdAt ?? "";
@@ -413,6 +419,27 @@ export function HomeScreen() {
                   >
                     {group.title}
                   </Text>
+                  <Text style={{ color: muted, fontSize: 12, fontWeight: "600" }}>
+                    {group.threads.length}
+                  </Text>
+                  {group.project ? (
+                    <Pressable
+                      accessibilityLabel={`Create thread in ${group.title}`}
+                      hitSlop={8}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/projects/[environmentId]/[projectId]/new-thread",
+                          params: {
+                            environmentId: group.project!.environmentId,
+                            projectId: group.project!.id,
+                          },
+                        })
+                      }
+                      className="h-7 w-7 items-center justify-center rounded-full bg-default"
+                    >
+                      <AppIcon name="plus" size={15} color={isDark ? "#d4d4d4" : "#525252"} />
+                    </Pressable>
+                  ) : null}
                   {group.threads.length > COLLAPSED_THREAD_LIMIT ? (
                     <Pressable
                       hitSlop={10}
@@ -429,11 +456,7 @@ export function HomeScreen() {
                         {isExpanded ? "Show less" : `${hiddenCount} more`}
                       </Text>
                     </Pressable>
-                  ) : (
-                    <Text style={{ color: muted, fontSize: 12, fontWeight: "600" }}>
-                      {group.threads.length}
-                    </Text>
-                  )}
+                  ) : null}
                 </View>
                 <View
                   style={{
@@ -444,23 +467,27 @@ export function HomeScreen() {
                     backgroundColor: surface,
                   }}
                 >
-                  {visibleThreads.map((thread, index) => (
-                    <ThreadRow
-                      key={`${thread.environmentId}:${thread.id}`}
-                      thread={thread}
-                      isDark={isDark}
-                      isLast={index === visibleThreads.length - 1}
-                      onPress={() =>
-                        router.push({
-                          pathname: "/threads/[environmentId]/[threadId]",
-                          params: {
-                            environmentId: thread.environmentId,
-                            threadId: thread.id,
-                          },
-                        })
-                      }
-                    />
-                  ))}
+                  {visibleThreads.length > 0 ? (
+                    visibleThreads.map((thread, index) => (
+                      <ThreadRow
+                        key={`${thread.environmentId}:${thread.id}`}
+                        thread={thread}
+                        isDark={isDark}
+                        isLast={index === visibleThreads.length - 1}
+                        onPress={() =>
+                          router.push({
+                            pathname: "/threads/[environmentId]/[threadId]",
+                            params: {
+                              environmentId: thread.environmentId,
+                              threadId: thread.id,
+                            },
+                          })
+                        }
+                      />
+                    ))
+                  ) : (
+                    <Text className="px-4 py-5 text-sm text-muted">No threads yet</Text>
+                  )}
                 </View>
               </View>
             );

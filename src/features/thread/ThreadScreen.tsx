@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -22,7 +21,16 @@ import { useThread } from "@/runtime/useThread";
 import { relativeTime } from "@/utils/time";
 import { attachmentHeaders, messageImageUrl } from "./messageAttachments";
 import { MarkdownContent } from "./MarkdownContent";
-import { buildModelOptions, type ModelOption } from "./modelOptions";
+import { ModelSelectorDrawer, ThinkingOptionsDrawer } from "./ComposerSelectors";
+import {
+  buildModelOptions,
+  getDescriptorDefaultValue,
+  getModelSelectionOption,
+  modelOptionsForConversation,
+  setModelSelectionOption,
+  thinkingOptionDescriptors,
+  type ModelOption,
+} from "./modelOptions";
 import { buildThreadFeed, formatWorkDuration, type ThreadFeedEntry } from "./threadFeed";
 
 function firstParam(value: string | string[] | undefined): string {
@@ -125,69 +133,6 @@ function MessageRow({
   );
 }
 
-function ModelSelector({
-  options,
-  selected,
-  visible,
-  onClose,
-  onSelect,
-}: {
-  readonly options: readonly ModelOption[];
-  readonly selected: ModelSelection;
-  readonly visible: boolean;
-  readonly onClose: () => void;
-  readonly onSelect: (option: ModelOption) => void;
-}) {
-  return (
-    <Modal
-      animationType="slide"
-      transparent
-      visible={visible}
-      onRequestClose={onClose}
-      statusBarTranslucent
-    >
-      <Pressable className="flex-1 justify-end bg-black/40" onPress={onClose}>
-        <Pressable
-          className="max-h-[70%] rounded-t-[28px] border-t border-border bg-background px-4 pb-8 pt-3"
-          onPress={(event) => event.stopPropagation()}
-        >
-          <View className="mb-2 h-1 w-10 self-center rounded-full bg-border" />
-          <Text className="px-2 pb-3 pt-2 text-lg font-bold text-foreground">Select model</Text>
-          <ScrollView>
-            {options.map((option) => {
-              const active =
-                option.selection.instanceId === selected.instanceId &&
-                option.selection.model === selected.model;
-              return (
-                <Pressable
-                  key={option.key}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: active }}
-                  onPress={() => onSelect(option)}
-                  className={`mb-1 flex-row items-center rounded-2xl px-3 py-3 ${
-                    active ? "bg-default" : ""
-                  }`}
-                >
-                  <View className="mr-3 h-9 w-9 items-center justify-center rounded-full bg-surface">
-                    <Text className="text-xs font-bold text-muted">AI</Text>
-                  </View>
-                  <View className="flex-1">
-                    <Text className="text-[15px] font-semibold text-foreground">
-                      {option.label}
-                    </Text>
-                    <Text className="mt-0.5 text-xs text-muted">{option.providerLabel}</Text>
-                  </View>
-                  {active ? <View className="h-2.5 w-2.5 rounded-full bg-accent" /> : null}
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-        </Pressable>
-      </Pressable>
-    </Modal>
-  );
-}
-
 function WorkLogGroup({
   entry,
   expanded,
@@ -279,6 +224,7 @@ export function ThreadScreen() {
   } = useThread(environmentId, threadId);
   const [draft, setDraft] = useState("");
   const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
+  const [thinkingSelectorOpen, setThinkingSelectorOpen] = useState(false);
   const [selectedModel, setSelectedModel] = useState<ModelSelection | null>(null);
   const [modelError, setModelError] = useState<string | null>(null);
   const [expandedWorkLogs, setExpandedWorkLogs] = useState<ReadonlySet<string>>(new Set());
@@ -293,10 +239,42 @@ export function ThreadScreen() {
   const statusLabel = live ? "Live" : dataSource === "http" ? "HTTP sync" : "Offline";
   const statusColor = live ? "#22c55e" : dataSource === "http" ? "#f59e0b" : "#737373";
   const effectiveModel = selectedModel ?? thread?.modelSelection ?? shell?.modelSelection ?? null;
-  const modelOptions = useMemo(
+  const allModelOptions = useMemo(
     () => (effectiveModel ? buildModelOptions(serverConfig, effectiveModel) : []),
     [effectiveModel, serverConfig]
   );
+  const hasExistingConversation =
+    messages.some(
+      (message) =>
+        message.role === "user" && !("optimistic" in message && message.optimistic === true)
+    ) && messages.some((message) => message.role === "assistant");
+  const modelOptions = useMemo(
+    () => modelOptionsForConversation(allModelOptions, effectiveModel, hasExistingConversation),
+    [allModelOptions, effectiveModel, hasExistingConversation]
+  );
+  const selectedModelOption =
+    allModelOptions.find(
+      (option) =>
+        effectiveModel &&
+        option.selection.instanceId === effectiveModel.instanceId &&
+        option.selection.model === effectiveModel.model
+    ) ?? null;
+  const thinkingDescriptors = thinkingOptionDescriptors(selectedModelOption);
+  const thinkingLabel = (() => {
+    const descriptor = thinkingDescriptors[0];
+    if (!descriptor || !effectiveModel) return "Thinking";
+    const value =
+      getModelSelectionOption(effectiveModel, descriptor.id) ??
+      getDescriptorDefaultValue(descriptor);
+    if (typeof value === "boolean") return value ? "Thinking on" : "Thinking off";
+    if (typeof value === "string") {
+      if (descriptor.type === "select") {
+        return descriptor.options.find((option) => option.id === value)?.label ?? value;
+      }
+      return value;
+    }
+    return descriptor.label;
+  })();
 
   useEffect(() => {
     requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: false }));
@@ -316,16 +294,39 @@ export function ThreadScreen() {
 
   const selectModel = useCallback(
     (option: ModelOption) => {
-      setSelectedModel(option.selection);
+      const nextSelection =
+        effectiveModel &&
+        option.selection.instanceId === effectiveModel.instanceId &&
+        option.selection.model === effectiveModel.model
+          ? effectiveModel
+          : option.selection;
+      setSelectedModel(nextSelection);
       setModelError(null);
       setModelSelectorOpen(false);
-      void updateModelSelection(option.selection).catch((selectionError: unknown) => {
+      void updateModelSelection(nextSelection).catch((selectionError: unknown) => {
         setModelError(
           selectionError instanceof Error ? selectionError.message : "Unable to update the model."
         );
       });
     },
-    [updateModelSelection]
+    [effectiveModel, updateModelSelection]
+  );
+
+  const selectThinkingOption = useCallback(
+    (id: string, value: string | boolean) => {
+      if (!effectiveModel) return;
+      const nextSelection = setModelSelectionOption(effectiveModel, id, value);
+      setSelectedModel(nextSelection);
+      setModelError(null);
+      void updateModelSelection(nextSelection).catch((selectionError: unknown) => {
+        setModelError(
+          selectionError instanceof Error
+            ? selectionError.message
+            : "Unable to update thinking options."
+        );
+      });
+    },
+    [effectiveModel, updateModelSelection]
   );
 
   const toggleWorkLog = useCallback((id: string) => {
@@ -494,6 +495,17 @@ export function ThreadScreen() {
                 {busy ? <Text className="text-xs text-warning">Running</Text> : null}
               </Pressable>
               <Pressable
+                accessibilityLabel="Thinking options"
+                accessibilityRole="button"
+                disabled={!effectiveModel}
+                onPress={() => setThinkingSelectorOpen(true)}
+                className="mr-2 max-w-[32%] rounded-full bg-default px-3 py-2"
+              >
+                <Text className="text-xs font-semibold text-muted" numberOfLines={1}>
+                  {thinkingLabel}
+                </Text>
+              </Pressable>
+              <Pressable
                 disabled={!canSend}
                 onPress={() => void submit()}
                 className={`h-11 w-11 items-center justify-center rounded-full ${
@@ -512,12 +524,22 @@ export function ThreadScreen() {
         </View>
       </KeyboardAvoidingView>
       {effectiveModel ? (
-        <ModelSelector
+        <ModelSelectorDrawer
+          lockedProvider={hasExistingConversation}
           options={modelOptions}
           selected={effectiveModel}
           visible={modelSelectorOpen}
           onClose={() => setModelSelectorOpen(false)}
           onSelect={selectModel}
+        />
+      ) : null}
+      {effectiveModel ? (
+        <ThinkingOptionsDrawer
+          descriptors={thinkingDescriptors}
+          selection={effectiveModel}
+          visible={thinkingSelectorOpen}
+          onClose={() => setThinkingSelectorOpen(false)}
+          onSelect={selectThinkingOption}
         />
       ) : null}
     </Screen>

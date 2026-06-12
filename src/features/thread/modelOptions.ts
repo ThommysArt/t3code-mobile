@@ -1,10 +1,24 @@
-import type { ModelSelection, ServerConfig } from "@t3tools/contracts";
+import type {
+  ModelSelection,
+  ProviderOptionDescriptor,
+  ProviderOptionSelectionValue,
+  ServerConfig,
+} from "@t3tools/contracts";
 
 export interface ModelOption {
   readonly key: string;
   readonly label: string;
+  readonly providerKey: string;
   readonly providerLabel: string;
+  readonly providerDriver: string;
+  readonly optionDescriptors: readonly ProviderOptionDescriptor[];
   readonly selection: ModelSelection;
+}
+
+export interface ProviderGroup {
+  readonly providerKey: string;
+  readonly providerLabel: string;
+  readonly models: readonly ModelOption[];
 }
 
 function providerLabel(provider: ServerConfig["providers"][number]): string {
@@ -16,7 +30,7 @@ function providerLabel(provider: ServerConfig["providers"][number]): string {
 
 export function buildModelOptions(
   config: ServerConfig | null | undefined,
-  fallback: ModelSelection
+  fallback: ModelSelection | null
 ): readonly ModelOption[] {
   const options = new Map<string, ModelOption>();
 
@@ -30,24 +44,124 @@ export function buildModelOptions(
       options.set(key, {
         key,
         label: model.name,
+        providerKey: provider.instanceId,
         providerLabel: providerLabel(provider),
+        providerDriver: provider.driver,
+        optionDescriptors: model.capabilities?.optionDescriptors ?? [],
         selection: {
           instanceId: provider.instanceId,
           model: model.slug,
+          options: defaultOptionSelections(model.capabilities?.optionDescriptors ?? []),
         },
       });
     }
   }
 
-  const fallbackKey = `${fallback.instanceId}:${fallback.model}`;
-  if (!options.has(fallbackKey)) {
-    options.set(fallbackKey, {
-      key: fallbackKey,
-      label: fallback.model,
-      providerLabel: fallback.instanceId,
-      selection: fallback,
-    });
+  if (fallback) {
+    const fallbackKey = `${fallback.instanceId}:${fallback.model}`;
+    if (!options.has(fallbackKey)) {
+      options.set(fallbackKey, {
+        key: fallbackKey,
+        label: fallback.model,
+        providerKey: fallback.instanceId,
+        providerLabel: fallback.instanceId,
+        providerDriver: fallback.instanceId,
+        optionDescriptors: [],
+        selection: fallback,
+      });
+    }
   }
 
   return [...options.values()];
+}
+
+function defaultOptionSelections(
+  descriptors: readonly ProviderOptionDescriptor[]
+): ModelSelection["options"] {
+  const selections: { id: string; value: ProviderOptionSelectionValue }[] = [];
+  for (const descriptor of descriptors) {
+    if (descriptor.type === "boolean") {
+      if (descriptor.currentValue !== undefined) {
+        selections.push({ id: descriptor.id, value: descriptor.currentValue });
+      }
+      continue;
+    }
+    const value =
+      descriptor.currentValue ?? descriptor.options.find((option) => option.isDefault)?.id;
+    if (value) selections.push({ id: descriptor.id, value });
+  }
+  return selections.length > 0 ? selections : undefined;
+}
+
+export function groupModelOptions(options: readonly ModelOption[]): readonly ProviderGroup[] {
+  const groups = new Map<string, { label: string; models: ModelOption[] }>();
+  for (const option of options) {
+    const group = groups.get(option.providerKey);
+    if (group) group.models.push(option);
+    else {
+      groups.set(option.providerKey, {
+        label: option.providerLabel,
+        models: [option],
+      });
+    }
+  }
+  return [...groups.entries()].map(([providerKey, group]) => ({
+    providerKey,
+    providerLabel: group.label,
+    models: group.models,
+  }));
+}
+
+export function modelOptionsForConversation(
+  options: readonly ModelOption[],
+  selection: ModelSelection | null,
+  lockedProvider: boolean
+): readonly ModelOption[] {
+  if (!lockedProvider || !selection) return options;
+  return options.filter((option) => option.selection.instanceId === selection.instanceId);
+}
+
+export function setModelSelectionOption(
+  selection: ModelSelection,
+  id: string,
+  value: ProviderOptionSelectionValue
+): ModelSelection {
+  return {
+    ...selection,
+    options: [...(selection.options ?? []).filter((option) => option.id !== id), { id, value }],
+  };
+}
+
+export function getModelSelectionOption(
+  selection: ModelSelection,
+  id: string
+): ProviderOptionSelectionValue | undefined {
+  return selection.options?.find((option) => option.id === id)?.value;
+}
+
+export function getDescriptorDefaultValue(
+  descriptor: ProviderOptionDescriptor
+): ProviderOptionSelectionValue | undefined {
+  if (descriptor.currentValue !== undefined) return descriptor.currentValue;
+  if (descriptor.type === "select") {
+    return descriptor.options.find((option) => option.isDefault)?.id;
+  }
+  return undefined;
+}
+
+export function thinkingOptionDescriptors(
+  option: ModelOption | null
+): readonly ProviderOptionDescriptor[] {
+  return (option?.optionDescriptors ?? []).filter((descriptor) => {
+    const id = descriptor.id.toLowerCase();
+    const label = descriptor.label.toLowerCase();
+    return (
+      id.includes("effort") ||
+      id.includes("reasoning") ||
+      id.includes("thinking") ||
+      label.includes("effort") ||
+      label.includes("reasoning") ||
+      label.includes("thinking")
+    );
+  });
 }
