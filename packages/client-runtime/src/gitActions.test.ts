@@ -90,4 +90,14 @@ describe("actionIncludesPendingCommit", () => {
       })
     ).toBe(false);
   });
+
+  it("treats commit_push as pending when a custom commit message is provided", () => {
+    expect(
+      actionIncludesPendingCommit({
+        action: "commit_push",
+        hasWorkingTreeChanges: false,
+        commitMessage: "Fix git confirmation toast",
+      })
+    ).toBe(true);
+  });
 });

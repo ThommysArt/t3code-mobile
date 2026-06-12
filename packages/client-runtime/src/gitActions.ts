@@ -358,6 +358,7 @@ export function actionIncludesPendingCommit(input: {
   action: GitStackedAction;
   hasWorkingTreeChanges: boolean;
   featureBranch?: boolean;
+  commitMessage?: string;
 }): boolean {
   if (
     input.action !== "commit" &&
@@ -367,7 +368,10 @@ export function actionIncludesPendingCommit(input: {
     return false;
   }
   return (
-    input.action === "commit" || input.hasWorkingTreeChanges || input.featureBranch === true
+    input.action === "commit" ||
+    input.hasWorkingTreeChanges ||
+    input.featureBranch === true ||
+    (input.commitMessage?.trim() ?? "").length > 0
   );
 }
 

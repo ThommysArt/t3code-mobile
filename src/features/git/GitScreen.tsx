@@ -1,7 +1,6 @@
 import {
   actionIncludesPendingCommit,
   buildMenuItems,
-  getGitActionDisabledReason,
   requiresDefaultBranchConfirmation,
   resolveDefaultBranchActionDialogCopy,
   resolveQuickAction,
@@ -17,7 +16,17 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Button, Card, Chip, Input, Toast, useToast } from "heroui-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Linking, Pressable, ScrollView, Text, useColorScheme, View } from "react-native";
+import {
+  KeyboardAvoidingView,
+  Linking,
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  useColorScheme,
+  View,
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon } from "@/components/AppIcon";
 import { ConnectionBanner } from "@/components/ConnectionBanner";
@@ -58,9 +67,37 @@ function actionIncludesCommit(action: GitStackedAction): boolean {
 function resolvePendingCommit(
   action: GitStackedAction,
   hasWorkingTreeChanges: boolean,
-  featureBranch?: boolean
+  featureBranch?: boolean,
+  commitMessage?: string
 ): boolean {
-  return actionIncludesPendingCommit({ action, hasWorkingTreeChanges, featureBranch });
+  return actionIncludesPendingCommit({
+    action,
+    hasWorkingTreeChanges,
+    featureBranch,
+    commitMessage,
+  });
+}
+
+function withCommitOptions(
+  input: GitActionRequestInput,
+  options: {
+    readonly commitMessage: string;
+    readonly selectedFiles: readonly { readonly path: string }[];
+    readonly files: readonly { readonly path: string }[];
+  }
+): GitActionRequestInput {
+  if (!actionIncludesCommit(input.action)) {
+    return input;
+  }
+
+  const trimmedMessage = options.commitMessage.trim();
+  return {
+    ...input,
+    ...(trimmedMessage ? { commitMessage: trimmedMessage } : {}),
+    ...(options.selectedFiles.length > 0 && options.selectedFiles.length !== options.files.length
+      ? { filePaths: options.selectedFiles.map((file) => file.path) }
+      : {}),
+  };
 }
 
 function GitConfirmActionButton(props: {
@@ -92,6 +129,7 @@ export function GitScreen() {
     threadId?: string | string[];
   }>();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const isDark = useColorScheme() === "dark";
   const { toast } = useToast();
   const environmentIdRaw = firstParam(params.environmentId);
@@ -111,10 +149,16 @@ export function GitScreen() {
   const [isEditingFiles, setIsEditingFiles] = useState(false);
   const [operationLabel, setOperationLabel] = useState<string | null>(null);
   const runActionRef = useRef<(input: GitActionRequestInput) => Promise<void>>(async () => {});
+  const commitMessageRef = useRef(commitMessage);
+  const selectedFilesRef = useRef<readonly { readonly path: string }[]>([]);
+  const filesRef = useRef<readonly { readonly path: string }[]>([]);
 
   const status = git.data;
   const files = status?.workingTree.files ?? [];
   const selectedFiles = files.filter((file) => !excludedFiles.has(file.path));
+  commitMessageRef.current = commitMessage;
+  selectedFilesRef.current = selectedFiles;
+  filesRef.current = files;
   const selectedInsertions = selectedFiles.reduce((total, file) => total + file.insertions, 0);
   const selectedDeletions = selectedFiles.reduce((total, file) => total + file.deletions, 0);
   const selectedFilePreview = selectedFiles.slice(0, 3);
@@ -141,7 +185,12 @@ export function GitScreen() {
       const copy = resolveDefaultBranchActionDialogCopy({
         action,
         branchName: branch,
-        includesCommit: resolvePendingCommit(action, status?.hasWorkingTreeChanges ?? false),
+        includesCommit: resolvePendingCommit(
+          action,
+          status?.hasWorkingTreeChanges ?? false,
+          undefined,
+          commitMessageRef.current
+        ),
       });
       return new Promise((resolve) => {
         let resolved = false;
@@ -219,6 +268,12 @@ export function GitScreen() {
           actionInput = { ...input, featureBranch: true };
         }
       }
+
+      actionInput = withCommitOptions(actionInput, {
+        commitMessage: commitMessageRef.current,
+        selectedFiles: selectedFilesRef.current,
+        files: filesRef.current,
+      });
 
       setOperationLabel("Starting source-control action");
       logStatus("git", "info", "Source-control action started", actionInput.action, {
@@ -342,13 +397,12 @@ export function GitScreen() {
         });
         return;
       }
-      await runAction({
-        action: quickAction.action,
-        ...(commitMessage.trim() ? { commitMessage: commitMessage.trim() } : {}),
-        ...(selectedFiles.length > 0 && selectedFiles.length !== files.length
-          ? { filePaths: selectedFiles.map((file) => file.path) }
-          : {}),
-      });
+      await runAction(
+        withCommitOptions(
+          { action: quickAction.action },
+          { commitMessage, selectedFiles, files }
+        )
+      );
     }
   }, [
     commitMessage,
@@ -391,12 +445,25 @@ export function GitScreen() {
         </Button>
       </View>
 
-      <ScrollView
+      <KeyboardAvoidingView
         className="flex-1"
         style={{ flex: 1 }}
-        contentContainerClassName="gap-4 px-4 pb-10 pt-4"
-        keyboardShouldPersistTaps="handled"
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
       >
+        <ScrollView
+          className="flex-1"
+          style={{ flex: 1 }}
+          contentContainerStyle={{
+            gap: 16,
+            paddingHorizontal: 16,
+            paddingTop: 16,
+            paddingBottom: Math.max(insets.bottom, 16) + 280,
+          }}
+          keyboardDismissMode="interactive"
+          keyboardShouldPersistTaps="handled"
+          automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+        >
         {!cwd ? (
           <ConnectionBanner
             title="Repository unavailable"
@@ -438,6 +505,62 @@ export function GitScreen() {
             </Card.Body>
           </Card>
         ) : null}
+
+        <Card>
+          <Card.Body className="gap-3">
+            <View>
+              <Card.Title>Commit message</Card.Title>
+              <Card.Description>Leave blank to let the server generate a message.</Card.Description>
+            </View>
+            <Input
+              value={commitMessage}
+              onChangeText={setCommitMessage}
+              placeholder="Describe the change"
+            />
+          </Card.Body>
+        </Card>
+
+        <View className="gap-3">
+          <Button
+            size="lg"
+            isDisabled={quickAction.disabled || busy}
+            onPress={() => void runQuickAction()}
+          >
+            {quickAction.label}
+          </Button>
+
+          <View className="flex-row gap-3">
+            {menuItems.map((item) => {
+              const noCommitFiles = item.id === "commit" && selectedFiles.length === 0;
+              return (
+                <View key={item.id} className="flex-1">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    isDisabled={item.disabled || noCommitFiles}
+                    onPress={() => {
+                      if (item.kind === "open_pr") {
+                        const url = status?.pr?.state === "open" ? status.pr.url : null;
+                        if (url) void Linking.openURL(url);
+                        return;
+                      }
+                      if (item.dialogAction) {
+                        void runAction(
+                          withCommitOptions(
+                            { action: item.dialogAction },
+                            { commitMessage, selectedFiles, files }
+                          )
+                        );
+                      }
+                    }}
+                  >
+                    {item.label}
+                  </Button>
+                </View>
+              );
+            })}
+          </View>
+        </View>
 
         {files.length > 0 ? (
           <Card>
@@ -556,89 +679,8 @@ export function GitScreen() {
             </Card.Body>
           </Card>
         ) : null}
-
-        <Card>
-          <Card.Body className="gap-3">
-            <View>
-              <Card.Title>Commit message</Card.Title>
-              <Card.Description>Leave blank to let the server generate a message.</Card.Description>
-            </View>
-            <Input
-              value={commitMessage}
-              onChangeText={setCommitMessage}
-              placeholder="Describe the change"
-            />
-          </Card.Body>
-        </Card>
-
-        <View className="gap-3">
-          <Button
-            size="lg"
-            isDisabled={quickAction.disabled || busy}
-            onPress={() => void runQuickAction()}
-          >
-            {quickAction.label}
-          </Button>
-          {quickAction.disabled && quickAction.hint ? (
-            <Text className="px-2 text-center text-xs leading-5 text-muted">
-              {quickAction.hint}
-            </Text>
-          ) : null}
-
-          <View className="flex-row gap-3">
-            {menuItems.map((item) => {
-              const noCommitFiles = item.id === "commit" && selectedFiles.length === 0;
-              const reason = noCommitFiles
-                ? "Select at least one changed file."
-                : getGitActionDisabledReason({
-                    item,
-                    gitStatus: status,
-                    isBusy: busy,
-                    hasOriginRemote: status?.hasPrimaryRemote ?? false,
-                  });
-              return (
-                <View key={item.id} className="flex-1 gap-1">
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    isDisabled={item.disabled || noCommitFiles}
-                    onPress={() => {
-                      if (item.kind === "open_pr") {
-                        const url = status?.pr?.state === "open" ? status.pr.url : null;
-                        if (url) void Linking.openURL(url);
-                        return;
-                      }
-                      if (item.dialogAction) {
-                        void runAction({
-                          action: item.dialogAction,
-                          ...(item.dialogAction === "commit" && commitMessage.trim()
-                            ? { commitMessage: commitMessage.trim() }
-                            : {}),
-                          ...(item.dialogAction === "commit" &&
-                          selectedFiles.length > 0 &&
-                          selectedFiles.length !== files.length
-                            ? { filePaths: selectedFiles.map((file) => file.path) }
-                            : {}),
-                        });
-                      }
-                    }}
-                  >
-                    {item.label}
-                  </Button>
-                  {reason ? (
-                    <Text
-                      className="text-center text-[10px] leading-4 text-muted"
-                      numberOfLines={2}
-                    >
-                      {reason}
-                    </Text>
-                  ) : null}
-                </View>
-              );
-            })}
-          </View>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </Screen>
   );
 }
