@@ -12,4 +12,5 @@ export {
   saveCachedThreadDetail,
   type CachedThreadDetail,
 } from "./threadDetailStore";
+export { loadThreadDraft, saveThreadDraft } from "./threadDraftStore";
 export { getDatabase } from "./database";

@@ -17,11 +17,13 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon } from "@/components/AppIcon";
 import { Screen } from "@/components/Screen";
+import { loadThreadDraft, saveThreadDraft } from "@/runtime/db";
 import { useThread } from "@/runtime/useThread";
 import { relativeTime } from "@/utils/time";
 import { attachmentHeaders, messageImageUrl } from "./messageAttachments";
 import { MarkdownContent } from "./MarkdownContent";
 import { ModelSelectorDrawer, ThinkingOptionsDrawer } from "./ComposerSelectors";
+import { COLLAPSED_PROMPT_HEIGHT, shouldCollapsePrompt } from "./messageDisplay";
 import {
   buildModelOptions,
   getDescriptorDefaultValue,
@@ -98,7 +100,10 @@ function MessageRow({
   readonly message: OrchestrationMessage & { optimistic?: true };
 }) {
   const isUser = message.role === "user";
+  const isDark = useColorScheme() === "dark";
+  const [expanded, setExpanded] = useState(false);
   const attachments = message.attachments ?? [];
+  const collapsible = isUser && shouldCollapsePrompt(message.text);
   if (!message.text.trim() && attachments.length === 0) return null;
   const headers = attachmentHeaders(bearerToken);
 
@@ -123,7 +128,38 @@ function MessageRow({
             />
           );
         })}
-        {message.text.trim() ? <MarkdownContent text={message.text} /> : null}
+        {message.text.trim() ? (
+          <>
+            <View
+              className="relative overflow-hidden"
+              style={collapsible && !expanded ? { maxHeight: COLLAPSED_PROMPT_HEIGHT } : undefined}
+            >
+              <MarkdownContent text={message.text} />
+              {collapsible && !expanded ? (
+                <View
+                  pointerEvents="none"
+                  className="absolute inset-x-0 bottom-0 h-9 items-center justify-end"
+                  style={{ backgroundColor: isDark ? "#262626" : "#e9e9ec" }}
+                >
+                  <Text className="pb-0.5 text-base font-bold text-muted">...</Text>
+                </View>
+              ) : null}
+            </View>
+            {collapsible ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ expanded }}
+                hitSlop={8}
+                onPress={() => setExpanded((current) => !current)}
+                className="self-end px-1 pt-1.5"
+              >
+                <Text className="text-xs font-semibold text-muted">
+                  {expanded ? "Show less" : "Show more"}
+                </Text>
+              </Pressable>
+            ) : null}
+          </>
+        ) : null}
       </View>
       <Text className="mt-1 px-1 text-[11px] text-muted">
         {message.optimistic ? "Queued" : relativeTime(message.createdAt)}
@@ -223,6 +259,9 @@ export function ThreadScreen() {
     updateModelSelection,
   } = useThread(environmentId, threadId);
   const [draft, setDraft] = useState("");
+  const draftRef = useRef("");
+  const draftEditedRef = useRef(false);
+  const draftHydratedRef = useRef(false);
   const [modelSelectorOpen, setModelSelectorOpen] = useState(false);
   const [thinkingSelectorOpen, setThinkingSelectorOpen] = useState(false);
   const [selectedModel, setSelectedModel] = useState<ModelSelection | null>(null);
@@ -284,13 +323,47 @@ export function ThreadScreen() {
     if (thread?.modelSelection) setSelectedModel(thread.modelSelection);
   }, [thread?.modelSelection]);
 
+  useEffect(() => {
+    let active = true;
+    draftHydratedRef.current = false;
+    draftEditedRef.current = false;
+    draftRef.current = "";
+    setDraft("");
+
+    void loadThreadDraft(environmentId, threadId).then((savedDraft) => {
+      if (!active) return;
+      if (!draftEditedRef.current) {
+        draftRef.current = savedDraft;
+        setDraft(savedDraft);
+      } else {
+        void saveThreadDraft(environmentId, threadId, draftRef.current);
+      }
+      draftHydratedRef.current = true;
+    });
+
+    return () => {
+      active = false;
+      void saveThreadDraft(environmentId, threadId, draftRef.current);
+    };
+  }, [environmentId, threadId]);
+
+  useEffect(() => {
+    if (!draftHydratedRef.current) return;
+    const timeout = setTimeout(() => {
+      void saveThreadDraft(environmentId, threadId, draft);
+    }, 300);
+    return () => clearTimeout(timeout);
+  }, [draft, environmentId, threadId]);
+
   const submit = useCallback(async () => {
     const text = draft.trim();
     if (!text || !effectiveModel) return;
+    draftRef.current = "";
     setDraft("");
+    void saveThreadDraft(environmentId, threadId, "");
     clearSendError();
     await sendMessage(text, effectiveModel);
-  }, [clearSendError, draft, effectiveModel, sendMessage]);
+  }, [clearSendError, draft, effectiveModel, environmentId, sendMessage, threadId]);
 
   const selectModel = useCallback(
     (option: ModelOption) => {
@@ -470,7 +543,11 @@ export function ThreadScreen() {
           <View className="min-h-32 rounded-[28px] border border-border bg-surface px-4 pb-3 pt-3">
             <TextInput
               value={draft}
-              onChangeText={setDraft}
+              onChangeText={(value) => {
+                draftEditedRef.current = true;
+                draftRef.current = value;
+                setDraft(value);
+              }}
               multiline
               placeholder={busy ? "Queue a follow-up..." : "Ask for follow-up changes..."}
               placeholderTextColor={isDark ? "#737373" : "#9a9a9a"}
