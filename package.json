@@ -16,7 +16,11 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "eas:build:preview": "eas build --profile preview --platform all",
+    "eas:build:preview:android": "eas build --profile preview-android --platform android",
+    "eas:build:preview:ios": "eas build --profile preview --platform ios",
+    "eas:build:preview:ios:simulator": "eas build --profile preview-ios-simulator --platform ios"
   },
   "dependencies": {
     "@expo/metro-runtime": "~56.0.13",
@@ -58,6 +62,7 @@
     "@types/react": "~19.2.15",
     "babel-preset-expo": "~56.0.0",
     "eslint": "^9.39.4",
+    "eas-cli": "^16.17.4",
     "eslint-config-expo": "^56.0.4",
     "prettier": "^3.8.3",
     "typescript": "~6.0.3",

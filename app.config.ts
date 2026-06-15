@@ -3,6 +3,7 @@ import type { ExpoConfig } from "expo/config";
 const config: ExpoConfig = {
   name: "T3 Code Mobile",
   slug: "t3-code-mobile",
+  owner: "thommysart24",
   version: "0.1.0",
   orientation: "portrait",
   icon: "./assets/icon.png",
@@ -60,6 +61,11 @@ const config: ExpoConfig = {
   ],
   experiments: {
     typedRoutes: true,
+  },
+  extra: {
+    eas: {
+      projectId: "ed858b4b-2bb8-4359-8fba-e4f7a6ada892",
+    },
   },
 };
 
