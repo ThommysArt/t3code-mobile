@@ -53,6 +53,108 @@ function SelectorSheet({
   );
 }
 
+export interface BranchOption {
+  readonly name: string;
+  readonly detail: string | null;
+  readonly current: boolean;
+  readonly isDefault: boolean;
+}
+
+export function BranchSelectorDrawer({
+  error,
+  isPending,
+  options,
+  selectedBranch,
+  visible,
+  onClose,
+  onSelect,
+}: {
+  readonly error: string | null;
+  readonly isPending: boolean;
+  readonly options: readonly BranchOption[];
+  readonly selectedBranch: string;
+  readonly visible: boolean;
+  readonly onClose: () => void;
+  readonly onSelect: (branch: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const normalizedQuery = query.trim().toLowerCase();
+  const filteredOptions = useMemo(
+    () =>
+      normalizedQuery
+        ? options.filter((option) => option.name.toLowerCase().includes(normalizedQuery))
+        : options,
+    [normalizedQuery, options]
+  );
+  const exactTypedBranch =
+    query.trim() && !options.some((option) => option.name === query.trim()) ? query.trim() : null;
+
+  useEffect(() => {
+    if (!visible) setQuery("");
+  }, [visible]);
+
+  return (
+    <SelectorSheet title="Select branch" visible={visible} onClose={onClose}>
+      <View className="px-4 pb-3">
+        <SearchField value={query} onChange={setQuery}>
+          <SearchField.Group>
+            <SearchField.SearchIcon />
+            <SearchField.Input placeholder="Search or type a branch" />
+            <SearchField.ClearButton />
+          </SearchField.Group>
+        </SearchField>
+        {isPending ? (
+          <Text className="mt-2 px-1 text-xs text-muted">Loading branches...</Text>
+        ) : null}
+        {error ? <Text className="mt-2 px-1 text-xs leading-5 text-danger">{error}</Text> : null}
+      </View>
+      <BottomSheetScrollView
+        keyboardShouldPersistTaps="handled"
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: 32, paddingHorizontal: 16 }}
+      >
+        {exactTypedBranch ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => onSelect(exactTypedBranch)}
+            className="mb-2 flex-row items-center rounded-2xl bg-default px-3 py-3"
+          >
+            <View className="flex-1">
+              <Text className="text-sm font-semibold text-foreground">{exactTypedBranch}</Text>
+              <Text className="mt-0.5 text-xs text-muted">Use typed branch</Text>
+            </View>
+          </Pressable>
+        ) : null}
+        {filteredOptions.length === 0 && !exactTypedBranch ? (
+          <Text className="px-2 py-8 text-center text-sm text-muted">No matching branches</Text>
+        ) : null}
+        {filteredOptions.map((option) => {
+          const active = option.name === selectedBranch;
+          return (
+            <Pressable
+              key={option.name}
+              accessibilityRole="button"
+              accessibilityState={{ selected: active }}
+              onPress={() => onSelect(option.name)}
+              className={`mb-1 flex-row items-center rounded-2xl px-3 py-3 ${
+                active ? "bg-default" : ""
+              }`}
+            >
+              <View className="flex-1">
+                <Text className="text-sm font-semibold text-foreground">{option.name}</Text>
+                {option.detail ? (
+                  <Text className="mt-0.5 text-xs text-muted">{option.detail}</Text>
+                ) : null}
+              </View>
+              {active ? <View className="h-2.5 w-2.5 rounded-full bg-accent" /> : null}
+            </Pressable>
+          );
+        })}
+      </BottomSheetScrollView>
+    </SelectorSheet>
+  );
+}
+
 export function ModelSelectorDrawer({
   lockedProvider,
   options,

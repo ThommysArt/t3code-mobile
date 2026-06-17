@@ -7,6 +7,7 @@ export type AppIconName =
   | "chevron-down"
   | "chevron-right"
   | "compose"
+  | "copy"
   | "file"
   | "folder"
   | "git"
@@ -68,6 +69,11 @@ export function AppIcon(props: {
         <>
           <Rect x="4" y="5" width="14" height="15" rx="3" {...common} />
           <Path d="m13 4 2-2 5 5-2 2-6.5 1.5Z" {...common} />
+        </>
+      ) : props.name === "copy" ? (
+        <>
+          <Rect x="8" y="8" width="11" height="11" rx="2" {...common} />
+          <Path d="M5 15H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1" {...common} />
         </>
       ) : props.name === "back" ? (
         <>

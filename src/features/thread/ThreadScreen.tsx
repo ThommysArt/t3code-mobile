@@ -1,10 +1,13 @@
 import type { ModelSelection, OrchestrationMessage } from "@t3tools/contracts";
+import * as Clipboard from "expo-clipboard";
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   Platform,
   Pressable,
   ScrollView,
@@ -103,10 +106,19 @@ function MessageRow({
   const isUser = message.role === "user";
   const isDark = useColorScheme() === "dark";
   const [expanded, setExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
   const attachments = message.attachments ?? [];
   const collapsible = isUser && shouldCollapsePrompt(message.text);
   if (!message.text.trim() && attachments.length === 0) return null;
   const headers = attachmentHeaders(bearerToken);
+  const copyMessage = () => {
+    const text = message.text.trim();
+    if (!text) return;
+    void Clipboard.setStringAsync(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    });
+  };
 
   return (
     <View className={isUser ? "items-end" : "items-stretch"}>
@@ -160,10 +172,26 @@ function MessageRow({
           </>
         ) : null}
       </View>
-      <Text className="mt-1 px-1 text-[11px] text-muted">
-        {message.optimistic ? "Queued" : relativeTime(message.createdAt)}
-        {message.streaming ? " · live" : ""}
-      </Text>
+      <View className="mt-1 flex-row items-center gap-2 px-1">
+        <Text className="text-[11px] text-muted">
+          {message.optimistic ? "Queued" : relativeTime(message.createdAt)}
+          {message.streaming ? " · live" : ""}
+        </Text>
+        {message.text.trim() ? (
+          <Pressable
+            accessibilityLabel={copied ? "Message copied" : "Copy message"}
+            accessibilityRole="button"
+            hitSlop={8}
+            onPress={copyMessage}
+            className="flex-row items-center gap-1 rounded-full px-1.5 py-0.5"
+          >
+            <AppIcon name="copy" size={12} color={isDark ? "#858585" : "#737373"} />
+            <Text className="text-[11px] font-semibold text-muted">
+              {copied ? "Copied" : "Copy"}
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -330,6 +358,7 @@ export function ThreadScreen() {
   const [modelError, setModelError] = useState<string | null>(null);
   const [expandedWorkLogs, setExpandedWorkLogs] = useState<ReadonlySet<string>>(new Set());
   const scrollRef = useRef<ScrollView>(null);
+  const stickToBottomRef = useRef(true);
   const feed = useMemo(
     () => buildThreadFeed(messages, thread?.activities ?? [], thread?.checkpoints ?? []),
     [messages, thread?.activities, thread?.checkpoints]
@@ -377,9 +406,16 @@ export function ThreadScreen() {
     return descriptor.label;
   })();
 
-  useEffect(() => {
+  const updateStickToBottom = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+    const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
+    stickToBottomRef.current = distanceFromBottom < 80;
+  }, []);
+
+  const scrollToBottomIfPinned = useCallback(() => {
+    if (!stickToBottomRef.current) return;
     requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: false }));
-  }, [feed.length]);
+  }, []);
 
   useEffect(() => {
     if (thread?.modelSelection) setSelectedModel(thread.modelSelection);
@@ -525,6 +561,9 @@ export function ThreadScreen() {
           keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"
           automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+          scrollEventThrottle={32}
+          onScroll={updateStickToBottom}
+          onContentSizeChange={scrollToBottomIfPinned}
         >
           {!live && (isCached || dataSource === "http") ? (
             <View className="flex-row items-start gap-3 rounded-2xl border border-border bg-surface px-4 py-3">

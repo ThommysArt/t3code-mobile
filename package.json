@@ -18,6 +18,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "eas:build:preview": "eas build --profile preview --platform all",
+    "deploy:android": "bash scripts/deploy-android.sh",
     "eas:build:preview:android": "eas build --profile preview-android --platform android",
     "eas:build:preview:ios": "eas build --profile preview --platform ios",
     "eas:build:preview:ios:simulator": "eas build --profile preview-ios-simulator --platform ios"
@@ -31,6 +32,7 @@
     "effect": "4.0.0-beta.78",
     "expo": "^56.0.0",
     "expo-camera": "~56.0.8",
+    "expo-clipboard": "~56.0.4",
     "expo-constants": "~56.0.18",
     "expo-crypto": "~56.0.4",
     "expo-dev-client": "~56.0.20",
