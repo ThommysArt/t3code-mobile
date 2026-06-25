@@ -5,8 +5,8 @@ import {
   type SidebarThreadPreviewCount,
   type TimestampFormat,
 } from "@t3tools/contracts";
-import * as SecureStore from "expo-secure-store";
 
+import { getSecureItem, setSecureItem } from "./secureStorage";
 import { setMinimalLoggingEnabled } from "./statusLog";
 
 const PREFERENCES_KEY = "t3code.minimal.preferences";
@@ -77,7 +77,7 @@ export async function loadPreferences(): Promise<MobilePreferences> {
   if (loadPromise) return loadPromise;
 
   loadPromise = (async () => {
-    const raw = await SecureStore.getItemAsync(PREFERENCES_KEY);
+    const raw = await getSecureItem(PREFERENCES_KEY);
     if (!raw) {
       cachedPreferences = DEFAULT_MOBILE_PREFERENCES;
       setMinimalLoggingEnabled(cachedPreferences.minimalLogging);
@@ -105,8 +105,7 @@ export async function savePreferences(
 ): Promise<MobilePreferences> {
   const next = normalizePreferences({ ...cachedPreferences, ...patch });
   cachedPreferences = next;
-  await SecureStore.setItemAsync(PREFERENCES_KEY, JSON.stringify(next));
+  await setSecureItem(PREFERENCES_KEY, JSON.stringify(next));
   notifyListeners();
   return next;
 }
-

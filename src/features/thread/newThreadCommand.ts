@@ -45,6 +45,7 @@ export function buildNewThreadTurnStartBootstrap(input: {
       projectCwd: input.projectCwd,
       baseBranch: input.branch,
       branch: buildTemporaryWorktreeBranchName(input.randomHex),
+      startFromOrigin: true,
     },
     runSetupScript: true,
   };

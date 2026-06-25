@@ -46,6 +46,7 @@ describe("buildNewThreadTurnStartBootstrap", () => {
       projectCwd: "/workspace/app",
       baseBranch: "main",
       branch: "t3code/abcd1234",
+      startFromOrigin: true,
     });
     expect(bootstrap.runSetupScript).toBe(true);
   });

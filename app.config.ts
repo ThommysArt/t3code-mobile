@@ -9,7 +9,7 @@ const config: ExpoConfig = {
   icon: "./assets/icon.png",
   scheme: "t3code-mobile",
   userInterfaceStyle: "automatic",
-  platforms: ["ios", "android"],
+  platforms: ["ios", "android", "web"],
   ios: {
     supportsTablet: true,
     bundleIdentifier: "com.t3tools.t3code.mobile",

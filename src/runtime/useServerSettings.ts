@@ -6,12 +6,16 @@ import { useEnvironments } from "./EnvironmentProvider";
 import { formatRemoteError } from "./statusLog";
 
 export function useServerSettings(environmentId: EnvironmentId | null | undefined) {
-  const { getClient } = useEnvironments();
+  const { getClient, getEnvironment } = useEnvironments();
   const [settings, setSettings] = useState<ServerSettings | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isLive = Boolean(environmentId && getClient(environmentId));
+  const environment = environmentId ? getEnvironment(environmentId) : null;
+  const sessionRevision = environment?.sessionRevision ?? 0;
+  const isLive = Boolean(
+    environmentId && environment?.connectionState === "ready" && getClient(environmentId)
+  );
 
   const refresh = useCallback(async () => {
     if (!environmentId) {
@@ -23,6 +27,7 @@ export function useServerSettings(environmentId: EnvironmentId | null | undefine
     const client = getClient(environmentId);
     if (!client) {
       setError("Live connection required to load server settings.");
+      setIsLoading(false);
       return;
     }
 
@@ -36,7 +41,7 @@ export function useServerSettings(environmentId: EnvironmentId | null | undefine
     } finally {
       setIsLoading(false);
     }
-  }, [environmentId, getClient]);
+  }, [environmentId, getClient, sessionRevision]);
 
   const updateSettings = useCallback(
     async (patch: ServerSettingsPatch) => {
