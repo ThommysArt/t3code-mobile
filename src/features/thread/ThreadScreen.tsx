@@ -727,7 +727,7 @@ export function ThreadScreen() {
         </ScrollView>
 
         <View
-          className="border-t border-separator bg-background px-3 pt-3"
+          className="px-3 pt-3"
           style={{ paddingBottom: Math.max(insets.bottom, 8) }}
         >
           {sendError || modelError || attachmentError ? (

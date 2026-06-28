@@ -14,6 +14,7 @@ import {
   useColorScheme,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon } from "@/components/AppIcon";
 import { Screen } from "@/components/Screen";
@@ -115,23 +116,23 @@ function ThreadRow(props: {
     <Pressable onPress={props.onPress} style={({ pressed }) => ({ opacity: pressed ? 0.66 : 1 })}>
       <View
         style={{
-          minHeight: 76,
+          minHeight: 62,
           flexDirection: "row",
-          gap: 12,
-          paddingHorizontal: 16,
-          paddingVertical: 14,
+          gap: 9,
+          paddingHorizontal: 12,
+          paddingVertical: 10,
           borderBottomWidth: props.isLast ? 0 : 1,
           borderBottomColor: separator,
         }}
       >
         <View
           style={{
-            width: 40,
-            height: 40,
-            marginTop: 2,
+            width: 32,
+            height: 32,
+            marginTop: 1,
             alignItems: "center",
             justifyContent: "center",
-            borderRadius: 12,
+            borderRadius: 10,
             backgroundColor:
               props.thread.session?.status === "running"
                 ? "#362012"
@@ -140,17 +141,17 @@ function ThreadRow(props: {
                   : "#eeeeef",
           }}
         >
-          <AppIcon name="branch" size={18} color={iconColor} strokeWidth={1.8} />
+          <AppIcon name="branch" size={15} color={iconColor} strokeWidth={1.8} />
         </View>
-        <View style={{ flex: 1, gap: 4 }}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <View style={{ flex: 1, gap: 3 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
             <Text
               style={{
                 flex: 1,
                 color: foreground,
-                fontSize: 16,
+                fontSize: 14,
                 fontWeight: "700",
-                lineHeight: 24,
+                lineHeight: 20,
               }}
               numberOfLines={1}
             >
@@ -159,23 +160,23 @@ function ThreadRow(props: {
             <View
               style={{
                 borderRadius: 999,
-                paddingHorizontal: 8,
-                paddingVertical: 4,
+                paddingHorizontal: 6,
+                paddingVertical: 2,
                 backgroundColor: tone.backgroundColor,
               }}
             >
-              <Text style={{ color: tone.foregroundColor, fontSize: 11, fontWeight: "600" }}>
+              <Text style={{ color: tone.foregroundColor, fontSize: 10, fontWeight: "600" }}>
                 {tone.label}
               </Text>
             </View>
-            <Text style={{ width: 34, color: muted, fontSize: 12, textAlign: "right" }}>
+            <Text style={{ width: 30, color: muted, fontSize: 11, textAlign: "right" }}>
               {relativeTime(props.thread.updatedAt ?? props.thread.createdAt)}
             </Text>
           </View>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-            <AppIcon name="branch" size={12} color={muted} strokeWidth={1.7} />
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+            <AppIcon name="branch" size={11} color={muted} strokeWidth={1.7} />
             <Text
-              style={{ flex: 1, color: muted, fontFamily: "monospace", fontSize: 12 }}
+              style={{ flex: 1, color: muted, fontFamily: "monospace", fontSize: 11 }}
               numberOfLines={1}
             >
               {props.thread.branch ?? "main"}
@@ -189,6 +190,7 @@ function ThreadRow(props: {
 
 export function HomeScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const isDark = useColorScheme() === "dark";
   const foreground = isDark ? "#f5f5f5" : "#171717";
   const muted = isDark ? "#858585" : "#737373";
@@ -303,12 +305,12 @@ export function HomeScreen() {
   );
 
   return (
-    <Screen>
-      <View className="flex-row items-center justify-between px-5 pb-4 pt-3">
-        <View className="flex-row items-center gap-3">
-          <Text className="text-[28px] font-bold tracking-tight text-foreground">T3 Code</Text>
-          <View className="rounded-full bg-default px-2.5 py-1">
-            <Text className="text-[10px] font-bold uppercase tracking-[1.5px] text-muted">
+    <Screen edges={["top", "left", "right"]}>
+      <View className="flex-row items-center justify-between px-4 pb-2 pt-2">
+        <View className="flex-row items-center gap-2">
+          <Text className="text-[24px] font-bold text-foreground">T3 Code</Text>
+          <View className="rounded-full bg-default px-2 py-0.5">
+            <Text className="text-[9px] font-bold uppercase tracking-[1px] text-muted">
               Mobile
             </Text>
           </View>
@@ -316,17 +318,17 @@ export function HomeScreen() {
         <Pressable
           accessibilityLabel="Open settings"
           onPress={() => router.push("/settings")}
-          className="h-12 w-12 items-center justify-center rounded-full border border-border bg-surface"
+          className="h-10 w-10 items-center justify-center rounded-full border border-border bg-surface"
         >
-          <AppIcon name="settings" size={24} color={isDark ? "#f5f5f5" : "#262626"} />
+          <AppIcon name="settings" size={20} color={isDark ? "#f5f5f5" : "#262626"} />
         </Pressable>
       </View>
 
       {environments.length > 0 ? (
-        <View className="mx-5 mb-2 flex-row items-center gap-2">
+        <View className="mx-4 mb-1 flex-row items-center gap-1.5">
           <View className="h-2 w-2 rounded-full" style={{ backgroundColor: connectionColor }} />
-          <Text className="text-xs font-semibold text-muted">{connectionLabel}</Text>
-          <Text className="text-xs text-muted">
+          <Text className="text-[11px] font-semibold text-muted">{connectionLabel}</Text>
+          <Text className="text-[11px] text-muted">
             {threads.length} thread{threads.length === 1 ? "" : "s"}
           </Text>
           {isConnecting ? <ActivityIndicator size="small" color={connectionColor} /> : null}
@@ -337,10 +339,10 @@ export function HomeScreen() {
         onLayout={handleCatalogLayout}
         style={{ flex: 1, width: "100%", backgroundColor: background }}
         contentContainerStyle={{
-          gap: 24,
-          paddingHorizontal: 16,
-          paddingTop: 12,
-          paddingBottom: 112,
+          gap: 16,
+          paddingHorizontal: 12,
+          paddingTop: 8,
+          paddingBottom: Math.max(insets.bottom, 8) + 64,
         }}
         keyboardDismissMode="on-drag"
         showsVerticalScrollIndicator={false}
@@ -396,24 +398,24 @@ export function HomeScreen() {
               : group.threads.slice(0, collapsedThreadLimit);
             const hiddenCount = group.threads.length - visibleThreads.length;
             return (
-              <View key={group.key} style={{ gap: 10 }}>
+              <View key={group.key} style={{ gap: 7 }}>
                 <View
                   style={{
-                    minHeight: 24,
+                    minHeight: 22,
                     flexDirection: "row",
                     alignItems: "center",
-                    gap: 8,
-                    paddingHorizontal: 8,
+                    gap: 6,
+                    paddingHorizontal: 6,
                   }}
                 >
-                  <AppIcon name="folder" size={16} color={muted} />
+                  <AppIcon name="folder" size={14} color={muted} />
                   <Text
                     style={{
                       flex: 1,
                       color: muted,
-                      fontSize: 13,
+                      fontSize: 12,
                       fontWeight: "700",
-                      letterSpacing: 0.8,
+                      letterSpacing: 0.6,
                       textTransform: "uppercase",
                     }}
                     numberOfLines={1}
@@ -432,7 +434,7 @@ export function HomeScreen() {
                         })
                       }
                     >
-                      <Text style={{ color: muted, fontSize: 12, fontWeight: "600" }}>
+                      <Text style={{ color: muted, fontSize: 11, fontWeight: "600" }}>
                         {isExpanded ? "Show less" : `${hiddenCount} more`}
                       </Text>
                     </Pressable>
@@ -450,16 +452,16 @@ export function HomeScreen() {
                           },
                         })
                       }
-                      className="h-7 w-7 items-center justify-center rounded-full bg-default"
+                      className="h-6 w-6 items-center justify-center rounded-full bg-default"
                     >
-                      <AppIcon name="plus" size={15} color={isDark ? "#d4d4d4" : "#525252"} />
+                      <AppIcon name="plus" size={13} color={isDark ? "#d4d4d4" : "#525252"} />
                     </Pressable>
                   ) : null}
                 </View>
                 <View
                   style={{
                     overflow: "hidden",
-                    borderRadius: 28,
+                    borderRadius: 20,
                     borderWidth: 1,
                     borderColor: border,
                     backgroundColor: surface,
@@ -502,42 +504,41 @@ export function HomeScreen() {
           flexDirection: "row",
           alignItems: "center",
           gap: 12,
-          paddingHorizontal: 20,
-          paddingTop: 8,
-          paddingBottom: 12,
-          backgroundColor: background,
+          paddingHorizontal: 14,
+          paddingTop: 6,
+          paddingBottom: Math.max(insets.bottom, 8),
         }}
       >
         <View
           style={{
-            height: 56,
+            height: 46,
             flex: 1,
             flexDirection: "row",
             alignItems: "center",
-            gap: 12,
+            gap: 8,
             borderRadius: 999,
             borderWidth: 1,
             borderColor: border,
             backgroundColor: surface,
-            paddingHorizontal: 16,
+            paddingHorizontal: 12,
           }}
         >
-          <AppIcon name="search" size={22} color={isDark ? "#d4d4d4" : "#525252"} />
+          <AppIcon name="search" size={18} color={isDark ? "#d4d4d4" : "#525252"} />
           <TextInput
             value={search}
             onChangeText={setSearch}
             placeholder="Search threads"
             placeholderTextColor={isDark ? "#858585" : "#8a8a8a"}
             returnKeyType="search"
-            style={{ flex: 1, color: foreground, fontSize: 16 }}
+            style={{ flex: 1, color: foreground, fontSize: 14 }}
           />
         </View>
         <Pressable
           accessibilityLabel="Refresh threads"
           onPress={() => void reloadThreads()}
           style={({ pressed }) => ({
-            width: 56,
-            height: 56,
+            width: 46,
+            height: 46,
             alignItems: "center",
             justifyContent: "center",
             borderRadius: 999,
@@ -547,7 +548,7 @@ export function HomeScreen() {
             opacity: pressed ? 0.66 : 1,
           })}
         >
-          <AppIcon name="refresh" size={23} color={isDark ? "#f5f5f5" : "#262626"} />
+          <AppIcon name="refresh" size={19} color={isDark ? "#f5f5f5" : "#262626"} />
         </Pressable>
       </View>
     </Screen>

@@ -7,11 +7,12 @@ import { formatRemoteError } from "./statusLog";
 
 export function useServerSettings(environmentId: EnvironmentId | null | undefined) {
   const { getClient, getEnvironment } = useEnvironments();
-  const [settings, setSettings] = useState<ServerSettings | null>(null);
+  const environment = environmentId ? getEnvironment(environmentId) : null;
+  const serverConfigSettings = environment?.serverConfig?.settings ?? null;
+  const [settings, setSettings] = useState<ServerSettings | null>(serverConfigSettings);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const environment = environmentId ? getEnvironment(environmentId) : null;
   const sessionRevision = environment?.sessionRevision ?? 0;
   const isLive = Boolean(
     environmentId && environment?.connectionState === "ready" && getClient(environmentId)
@@ -26,7 +27,11 @@ export function useServerSettings(environmentId: EnvironmentId | null | undefine
 
     const client = getClient(environmentId);
     if (!client) {
-      setError("Live connection required to load server settings.");
+      if (environment?.connectionState === "disconnected") {
+        setError("Live connection required to load server settings.");
+      } else {
+        setError(null);
+      }
       setIsLoading(false);
       return;
     }
@@ -41,7 +46,7 @@ export function useServerSettings(environmentId: EnvironmentId | null | undefine
     } finally {
       setIsLoading(false);
     }
-  }, [environmentId, getClient, sessionRevision]);
+  }, [environment?.connectionState, environmentId, getClient]);
 
   const updateSettings = useCallback(
     async (patch: ServerSettingsPatch) => {
@@ -71,8 +76,51 @@ export function useServerSettings(environmentId: EnvironmentId | null | undefine
   );
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    setSettings(serverConfigSettings);
+  }, [environmentId, serverConfigSettings]);
+
+  useEffect(() => {
+    let active = true;
+    async function refreshIfActive() {
+      if (!environmentId) {
+        if (!active) return;
+        setSettings(null);
+        setError(null);
+        setIsLoading(false);
+        return;
+      }
+
+      const client = getClient(environmentId);
+      if (!client) {
+        if (!active) return;
+        if (environment?.connectionState === "disconnected") {
+          setError("Live connection required to load server settings.");
+        } else {
+          setError(null);
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      setIsLoading(true);
+      try {
+        const next = await client.server.getSettings();
+        if (!active) return;
+        setSettings(next);
+        setError(null);
+      } catch (refreshError) {
+        if (!active) return;
+        setError(formatRemoteError(refreshError));
+      } finally {
+        if (active) setIsLoading(false);
+      }
+    }
+
+    void refreshIfActive();
+    return () => {
+      active = false;
+    };
+  }, [environment?.connectionState, environmentId, getClient, sessionRevision]);
 
   return {
     settings,

@@ -398,7 +398,7 @@ export function NewThreadScreen() {
           className="flex-1 px-5 py-5 text-[18px] leading-7 text-foreground"
         />
         <View
-          className="border-t border-separator bg-background px-3 pt-3"
+          className="px-3 pt-3"
           style={{ paddingBottom: Math.max(insets.bottom, 8) }}
         >
           {error || attachmentError ? (
