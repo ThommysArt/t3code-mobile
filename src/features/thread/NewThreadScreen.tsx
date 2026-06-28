@@ -380,12 +380,7 @@ export function NewThreadScreen() {
             <HeaderBubble accessibilityLabel="Go back" onPress={() => router.back()} variant="icon">
               <AppIcon name="back" size={21} color={theme.foreground} />
             </HeaderBubble>
-            <HeaderBubble
-              style={{ flex: 1 }}
-              subtitle={project.title}
-              title="New thread"
-              variant="title"
-            />
+            <HeaderBubble subtitle={project.title} title="New thread" variant="title" />
           </>
         }
         footer={

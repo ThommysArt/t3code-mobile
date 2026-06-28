@@ -14,7 +14,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon } from "@/components/AppIcon";
-import { HeaderBubble } from "@/components/chrome";
+import { HeaderBubble, HeaderSpacer } from "@/components/chrome";
 import { useBlurScreen } from "@/components/chrome/BlurScreenContext";
 import { useChromeTheme } from "@/components/chrome/useChromeTheme";
 import { bottomChromePaddingBottom } from "@/utils/bottomChrome";
@@ -36,13 +36,13 @@ export function SettingsScreenHeader(props: {
       >
         <AppIcon name="back" size={21} color={theme.foreground} />
       </HeaderBubble>
-      <HeaderBubble
-        style={{ flex: 1 }}
-        subtitle={props.subtitle}
-        title={props.title}
-        variant="title"
-      />
-      {props.action}
+      <HeaderBubble subtitle={props.subtitle} title={props.title} variant="title" />
+      {props.action ? (
+        <>
+          <HeaderSpacer />
+          {props.action}
+        </>
+      ) : null}
     </>
   );
 }

@@ -19,7 +19,7 @@ import type Reanimated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon } from "@/components/AppIcon";
-import { BlurScreenRoot, HeaderBubble } from "@/components/chrome";
+import { BlurScreenRoot, HeaderBubble, HeaderSpacer } from "@/components/chrome";
 import { useChromeTheme } from "@/components/chrome/useChromeTheme";
 import { FloatingBottomChrome } from "@/components/FloatingBottomChrome";
 import { ProviderIcon } from "@/components/ProviderIcon";
@@ -623,12 +623,8 @@ export function ThreadScreen() {
             <HeaderBubble accessibilityLabel="Go back" onPress={() => router.back()} variant="icon">
               <AppIcon name="back" size={21} color={theme.foreground} />
             </HeaderBubble>
-            <HeaderBubble
-              style={{ flex: 1 }}
-              subtitle={threadSubtitle}
-              title={threadTitle}
-              variant="title"
-            />
+            <HeaderBubble subtitle={threadSubtitle} title={threadTitle} variant="title" />
+            <HeaderSpacer />
             <HeaderBubble
               accessibilityLabel="Open source control"
               onPress={() =>

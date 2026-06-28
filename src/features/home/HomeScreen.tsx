@@ -17,7 +17,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon } from "@/components/AppIcon";
-import { BlurScreenRoot, HeaderBubble } from "@/components/chrome";
+import { BlurScreenRoot, HeaderBubble, HeaderSpacer } from "@/components/chrome";
 import { useChromeTheme } from "@/components/chrome/useChromeTheme";
 import { FloatingBottomChrome } from "@/components/FloatingBottomChrome";
 import { Screen } from "@/components/Screen";
@@ -319,11 +319,11 @@ export function HomeScreen() {
         onHeaderHeightChange={setHeaderHeight}
         header={
           <>
-            <HeaderBubble style={{ flex: 1 }} variant="title">
+            <HeaderBubble variant="title">
               <View style={{ alignItems: "center", flexDirection: "row", gap: 8, minWidth: 0 }}>
                 <Text
                   numberOfLines={1}
-                  style={{ color: theme.foreground, fontSize: 17, fontWeight: "700" }}
+                  style={{ color: theme.foreground, fontSize: 15, fontWeight: "600", lineHeight: 17 }}
                 >
                   T3 Code
                 </Text>
@@ -334,6 +334,7 @@ export function HomeScreen() {
                 </View>
               </View>
             </HeaderBubble>
+            <HeaderSpacer />
             <HeaderBubble
               accessibilityLabel="Open settings"
               onPress={() => router.push("/settings")}

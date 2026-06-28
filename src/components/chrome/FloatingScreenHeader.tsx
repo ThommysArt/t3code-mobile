@@ -32,6 +32,7 @@ export function FloatingScreenHeader(props: {
           alignItems: "center",
           flexDirection: "row",
           gap: 8,
+          justifyContent: "flex-start",
           paddingBottom: 4,
           paddingHorizontal: 14,
           paddingTop: 4,

@@ -26,14 +26,12 @@ export function HeaderBubble(props: {
         }
       : variant === "title"
         ? {
-            flexGrow: 1,
             flexShrink: 1,
-            gap: 1,
+            height: 40,
             justifyContent: "center",
-            minHeight: 40,
+            maxWidth: "100%",
             minWidth: 0,
-            paddingHorizontal: 14,
-            paddingVertical: 6,
+            paddingHorizontal: 12,
           }
         : {
             alignItems: "center",
@@ -46,17 +44,25 @@ export function HeaderBubble(props: {
 
   const content =
     props.title || props.subtitle ? (
-      <View style={{ gap: 1, minWidth: 0 }}>
+      <View style={{ gap: 0, minWidth: 0 }}>
         {props.title ? (
           <Text
             numberOfLines={1}
-            style={{ color: theme.foreground, fontSize: 17, fontWeight: "700" }}
+            style={{
+              color: theme.foreground,
+              fontSize: 15,
+              fontWeight: "600",
+              lineHeight: 17,
+            }}
           >
             {props.title}
           </Text>
         ) : null}
         {props.subtitle ? (
-          <Text numberOfLines={1} style={{ color: theme.muted, fontSize: 11 }}>
+          <Text
+            numberOfLines={1}
+            style={{ color: theme.muted, fontSize: 10, lineHeight: 12 }}
+          >
             {props.subtitle}
           </Text>
         ) : null}
@@ -72,7 +78,7 @@ export function HeaderBubble(props: {
         {
           backgroundColor: theme.isDark ? "rgba(23,23,23,0.94)" : "rgba(255,255,255,0.94)",
           borderColor: theme.border,
-          borderRadius: variant === "icon" ? 20 : 22,
+          borderRadius: 20,
           borderWidth: StyleSheet.hairlineWidth,
         },
         props.style,
