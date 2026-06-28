@@ -14,6 +14,7 @@ import { useCallback, useMemo, useState } from "react";
 import { Alert, Pressable, Text, View } from "react-native";
 
 import { ConnectionBanner } from "@/components/ConnectionBanner";
+import { BlurScreenRoot } from "@/components/chrome";
 import { Screen } from "@/components/Screen";
 import { usePreferences } from "@/runtime/PreferencesProvider";
 import { usePrimaryEnvironment } from "@/runtime/usePrimaryEnvironment";
@@ -258,8 +259,8 @@ export function GeneralSettingsScreen() {
   const serverControlsDisabled = !isLive || !settings || isLoading;
 
   return (
-    <Screen edges={["top", "left", "right"]}>
-      <SettingsScreenHeader title="General" subtitle="Mobile and server preferences" />
+    <Screen edges={["left", "right"]}>
+      <BlurScreenRoot header={<SettingsScreenHeader title="General" subtitle="Mobile and server preferences" />}>
       <SettingsScroll>
         <EnvironmentPicker
           environments={readyEnvironments.map((environment) => ({
@@ -433,6 +434,7 @@ export function GeneralSettingsScreen() {
           )}
         </SettingsSection>
       </SettingsScroll>
+      </BlurScreenRoot>
 
       {timestampSheetOpen ? (
         <OptionSheet

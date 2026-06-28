@@ -17,6 +17,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon } from "@/components/AppIcon";
+import { BlurScreenRoot, HeaderBubble } from "@/components/chrome";
+import { useChromeTheme } from "@/components/chrome/useChromeTheme";
 import { FloatingBottomChrome } from "@/components/FloatingBottomChrome";
 import { Screen } from "@/components/Screen";
 import { estimatedSearchChromeHeight } from "@/utils/bottomChrome";
@@ -207,6 +209,8 @@ export function HomeScreen() {
   const [bottomChromeHeight, setBottomChromeHeight] = useState(() =>
     estimatedSearchChromeHeight(insets)
   );
+  const [headerHeight, setHeaderHeight] = useState(insets.top + 52);
+  const theme = useChromeTheme();
   const hasLoggedViewportRef = useRef(false);
 
   const groups = useMemo<readonly ProjectGroup[]>(() => {
@@ -310,50 +314,112 @@ export function HomeScreen() {
   );
 
   return (
-    <Screen edges={["top", "left", "right"]}>
-      <View className="flex-row items-center justify-between px-4 pb-2 pt-2">
-        <View className="flex-row items-center gap-2">
-          <Text className="text-[24px] font-bold text-foreground">T3 Code</Text>
-          <View className="rounded-full bg-default px-2 py-0.5">
-            <Text className="text-[9px] font-bold uppercase tracking-[1px] text-muted">
-              Mobile
-            </Text>
-          </View>
-        </View>
-        <Pressable
-          accessibilityLabel="Open settings"
-          onPress={() => router.push("/settings")}
-          className="h-10 w-10 items-center justify-center rounded-full border border-border bg-surface"
-        >
-          <AppIcon name="settings" size={20} color={isDark ? "#f5f5f5" : "#262626"} />
-        </Pressable>
-      </View>
-
-      {environments.length > 0 ? (
-        <View className="mx-4 mb-1 flex-row items-center gap-1.5">
-          <View className="h-2 w-2 rounded-full" style={{ backgroundColor: connectionColor }} />
-          <Text className="text-[11px] font-semibold text-muted">{connectionLabel}</Text>
-          <Text className="text-[11px] text-muted">
-            {threads.length} thread{threads.length === 1 ? "" : "s"}
-          </Text>
-          {isConnecting ? <ActivityIndicator size="small" color={connectionColor} /> : null}
-        </View>
-      ) : null}
-
-      <View style={{ flex: 1 }}>
+    <Screen edges={["left", "right"]}>
+      <BlurScreenRoot
+        onHeaderHeightChange={setHeaderHeight}
+        header={
+          <>
+            <HeaderBubble style={{ flex: 1 }} variant="title">
+              <View style={{ alignItems: "center", flexDirection: "row", gap: 8, minWidth: 0 }}>
+                <Text
+                  numberOfLines={1}
+                  style={{ color: theme.foreground, fontSize: 17, fontWeight: "700" }}
+                >
+                  T3 Code
+                </Text>
+                <View className="rounded-full bg-default px-2 py-0.5">
+                  <Text className="text-[9px] font-bold uppercase tracking-[1px] text-muted">
+                    Mobile
+                  </Text>
+                </View>
+              </View>
+            </HeaderBubble>
+            <HeaderBubble
+              accessibilityLabel="Open settings"
+              onPress={() => router.push("/settings")}
+              variant="icon"
+            >
+              <AppIcon name="settings" size={20} color={theme.foreground} />
+            </HeaderBubble>
+          </>
+        }
+        footer={
+          <FloatingBottomChrome onHeightChange={setBottomChromeHeight}>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 12,
+              }}
+            >
+              <View
+                style={{
+                  height: 46,
+                  flex: 1,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 8,
+                  borderRadius: 999,
+                  borderWidth: 1,
+                  borderColor: border,
+                  backgroundColor: surface,
+                  paddingHorizontal: 12,
+                }}
+              >
+                <AppIcon name="search" size={18} color={isDark ? "#d4d4d4" : "#525252"} />
+                <TextInput
+                  value={search}
+                  onChangeText={setSearch}
+                  placeholder="Search threads"
+                  placeholderTextColor={isDark ? "#858585" : "#8a8a8a"}
+                  returnKeyType="search"
+                  style={{ flex: 1, color: foreground, fontSize: 14 }}
+                />
+              </View>
+              <Pressable
+                accessibilityLabel="Refresh threads"
+                onPress={() => void reloadThreads()}
+                style={({ pressed }) => ({
+                  width: 46,
+                  height: 46,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderRadius: 999,
+                  borderWidth: 1,
+                  borderColor: border,
+                  backgroundColor: surface,
+                  opacity: pressed ? 0.66 : 1,
+                })}
+              >
+                <AppIcon name="refresh" size={19} color={isDark ? "#f5f5f5" : "#262626"} />
+              </Pressable>
+            </View>
+          </FloatingBottomChrome>
+        }
+      >
         <ScrollView
           onLayout={handleCatalogLayout}
           style={{ flex: 1, width: "100%", backgroundColor: background }}
           contentContainerStyle={{
             gap: 16,
             paddingHorizontal: 12,
-            paddingTop: 8,
+            paddingTop: headerHeight + 4,
             paddingBottom: bottomChromeHeight + 8,
           }}
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
+        {environments.length > 0 ? (
+          <View className="flex-row items-center gap-1.5">
+            <View className="h-2 w-2 rounded-full" style={{ backgroundColor: connectionColor }} />
+            <Text className="text-[11px] font-semibold text-muted">{connectionLabel}</Text>
+            <Text className="text-[11px] text-muted">
+              {threads.length} thread{threads.length === 1 ? "" : "s"}
+            </Text>
+            {isConnecting ? <ActivityIndicator size="small" color={connectionColor} /> : null}
+          </View>
+        ) : null}
         {isBootstrapping ? (
           <View className="items-center gap-3 rounded-3xl border border-border bg-surface px-5 py-10">
             <ActivityIndicator color="#f97316" />
@@ -501,59 +567,7 @@ export function HomeScreen() {
           })
         )}
         </ScrollView>
-
-        <FloatingBottomChrome onHeightChange={setBottomChromeHeight}>
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 12,
-          }}
-        >
-        <View
-          style={{
-            height: 46,
-            flex: 1,
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 8,
-            borderRadius: 999,
-            borderWidth: 1,
-            borderColor: border,
-            backgroundColor: surface,
-            paddingHorizontal: 12,
-          }}
-        >
-          <AppIcon name="search" size={18} color={isDark ? "#d4d4d4" : "#525252"} />
-          <TextInput
-            value={search}
-            onChangeText={setSearch}
-            placeholder="Search threads"
-            placeholderTextColor={isDark ? "#858585" : "#8a8a8a"}
-            returnKeyType="search"
-            style={{ flex: 1, color: foreground, fontSize: 14 }}
-          />
-        </View>
-        <Pressable
-          accessibilityLabel="Refresh threads"
-          onPress={() => void reloadThreads()}
-          style={({ pressed }) => ({
-            width: 46,
-            height: 46,
-            alignItems: "center",
-            justifyContent: "center",
-            borderRadius: 999,
-            borderWidth: 1,
-            borderColor: border,
-            backgroundColor: surface,
-            opacity: pressed ? 0.66 : 1,
-          })}
-        >
-          <AppIcon name="refresh" size={19} color={isDark ? "#f5f5f5" : "#262626"} />
-        </Pressable>
-        </View>
-        </FloatingBottomChrome>
-      </View>
+      </BlurScreenRoot>
     </Screen>
   );
 }

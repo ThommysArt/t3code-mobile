@@ -16,6 +16,9 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon } from "@/components/AppIcon";
+import { BlurScreenRoot, HeaderBubble } from "@/components/chrome";
+
+import { useChromeTheme } from "@/components/chrome/useChromeTheme";
 import { bottomChromePaddingBottom } from "@/utils/bottomChrome";
 import { Screen } from "@/components/Screen";
 import { SettingsScreenHeader } from "./SettingsComponents";
@@ -84,6 +87,7 @@ function connectionStepLabel(step: string): string {
 
 export function ServerScreen() {
   const insets = useSafeAreaInsets();
+  const theme = useChromeTheme();
   const isDark = useColorScheme() === "dark";
   const {
     addConnection,
@@ -243,22 +247,26 @@ export function ServerScreen() {
   );
 
   return (
-    <Screen edges={["top", "left", "right"]}>
-      <SettingsScreenHeader
-        title="Server"
-        subtitle="Pair, sync, and inspect server connections"
-        action={
-          environments.length > 0 ? (
-            <Pressable
-              onPress={() => void reloadThreads()}
-              className="h-10 w-10 items-center justify-center rounded-full border border-border bg-surface"
-            >
-              <AppIcon name="refresh" size={19} color={isDark ? "#f5f5f5" : "#262626"} />
-            </Pressable>
-          ) : null
+    <Screen edges={["left", "right"]}>
+      <BlurScreenRoot
+        header={
+          <SettingsScreenHeader
+            title="Server"
+            subtitle="Pair, sync, and inspect server connections"
+            action={
+              environments.length > 0 ? (
+                <HeaderBubble
+                  accessibilityLabel="Refresh threads"
+                  onPress={() => void reloadThreads()}
+                  variant="icon"
+                >
+                  <AppIcon name="refresh" size={19} color={theme.foreground} />
+                </HeaderBubble>
+              ) : null
+            }
+          />
         }
-      />
-
+      >
       <ScrollView
         ref={scrollRef}
         className="flex-1"
@@ -268,7 +276,7 @@ export function ServerScreen() {
           gap: 16,
           paddingHorizontal: 12,
           paddingBottom: bottomChromePaddingBottom(insets) + 16,
-          paddingTop: 8,
+          paddingTop: insets.top + 56,
         }}
         keyboardShouldPersistTaps="handled"
       >
@@ -560,6 +568,7 @@ export function ServerScreen() {
 
         <StatusLogPanel />
       </ScrollView>
+      </BlurScreenRoot>
     </Screen>
   );
 }

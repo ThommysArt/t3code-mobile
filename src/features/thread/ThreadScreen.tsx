@@ -19,6 +19,8 @@ import type Reanimated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon } from "@/components/AppIcon";
+import { BlurScreenRoot, HeaderBubble } from "@/components/chrome";
+import { useChromeTheme } from "@/components/chrome/useChromeTheme";
 import { FloatingBottomChrome } from "@/components/FloatingBottomChrome";
 import { ProviderIcon } from "@/components/ProviderIcon";
 import { Screen } from "@/components/Screen";
@@ -420,6 +422,8 @@ export function ThreadScreen() {
   const [bottomChromeHeight, setBottomChromeHeight] = useState(() =>
     estimatedComposerChromeHeight(insets)
   );
+  const [headerHeight, setHeaderHeight] = useState(insets.top + 52);
+  const theme = useChromeTheme();
   const scrollRef = useRef<Reanimated.ScrollView>(null);
   const stickToBottomRef = useRef(true);
   const feed = useMemo(
@@ -607,41 +611,137 @@ export function ThreadScreen() {
     });
   }, []);
 
-  return (
-    <Screen edges={["top", "left", "right"]}>
-      <View className="flex-row items-center gap-3 border-b border-separator px-4 pb-2 pt-2">
-        <Pressable
-          onPress={() => router.back()}
-          className="h-10 w-10 items-center justify-center rounded-full bg-default"
-        >
-          <AppIcon name="back" size={21} color={isDark ? "#f5f5f5" : "#262626"} />
-        </Pressable>
-        <View className="flex-1">
-          <Text className="text-[17px] font-bold text-foreground" numberOfLines={1}>
-            {thread?.title ?? shell?.title ?? "Thread"}
-          </Text>
-          <View className="mt-0.5 flex-row items-center gap-1.5">
-            <View className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: statusColor }} />
-            <Text className="text-xs text-muted" numberOfLines={1}>
-              {statusLabel} · {thread?.branch ?? shell?.branch ?? "main"}
-            </Text>
-          </View>
-        </View>
-        <Pressable
-          accessibilityLabel="Open source control"
-          onPress={() =>
-            router.push({
-              pathname: "/threads/[environmentId]/[threadId]/git",
-              params: { environmentId, threadId },
-            })
-          }
-          className="h-10 w-10 items-center justify-center rounded-full border border-border bg-surface"
-        >
-          <AppIcon name="git" size={20} color={isDark ? "#f5f5f5" : "#262626"} />
-        </Pressable>
-      </View>
+  const threadTitle = thread?.title ?? shell?.title ?? "Thread";
+  const threadSubtitle = `${statusLabel} · ${thread?.branch ?? shell?.branch ?? "main"}`;
 
-      <View style={{ flex: 1 }}>
+  return (
+    <Screen edges={["left", "right"]}>
+      <BlurScreenRoot
+        onHeaderHeightChange={setHeaderHeight}
+        header={
+          <>
+            <HeaderBubble accessibilityLabel="Go back" onPress={() => router.back()} variant="icon">
+              <AppIcon name="back" size={21} color={theme.foreground} />
+            </HeaderBubble>
+            <HeaderBubble
+              style={{ flex: 1 }}
+              subtitle={threadSubtitle}
+              title={threadTitle}
+              variant="title"
+            />
+            <HeaderBubble
+              accessibilityLabel="Open source control"
+              onPress={() =>
+                router.push({
+                  pathname: "/threads/[environmentId]/[threadId]/git",
+                  params: { environmentId, threadId },
+                })
+              }
+              variant="icon"
+            >
+              <AppIcon name="git" size={20} color={theme.foreground} />
+            </HeaderBubble>
+          </>
+        }
+        footer={
+          <FloatingBottomChrome onHeightChange={setBottomChromeHeight}>
+            {sendError || modelError || attachmentError ? (
+              <View className="mb-2 rounded-xl bg-danger-soft px-3 py-2">
+                <Text className="text-xs leading-5 text-danger">
+                  {sendError ?? modelError ?? attachmentError}
+                </Text>
+              </View>
+            ) : null}
+            <View className="min-h-28 rounded-[20px] border border-border bg-surface px-3 pb-2.5 pt-2.5">
+              {selectedAttachments.length > 0 ? (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  className="mb-3"
+                  contentContainerStyle={{ gap: 8 }}
+                >
+                  {selectedAttachments.map((attachment) => (
+                    <ComposerImageAttachment
+                      key={attachment.key}
+                      attachment={attachment}
+                      onRemove={() => removeAttachment(attachment.key)}
+                    />
+                  ))}
+                </ScrollView>
+              ) : null}
+              <TextInput
+                value={draft}
+                onChangeText={(value) => {
+                  draftEditedRef.current = true;
+                  draftRef.current = value;
+                  setDraft(value);
+                }}
+                multiline
+                placeholder={busy ? "Queue a follow-up..." : "Ask for follow-up changes..."}
+                placeholderTextColor={isDark ? "#737373" : "#9a9a9a"}
+                className="max-h-24 min-h-14 text-[14px] leading-5 text-foreground"
+                textAlignVertical="top"
+              />
+              <View className="mt-2 flex-row items-center">
+                <Pressable
+                  accessibilityLabel="Attach images"
+                  accessibilityRole="button"
+                  onPress={() => void addImages()}
+                  className="mr-2 h-8 w-8 items-center justify-center rounded-full bg-default"
+                >
+                  <AppIcon name="image" size={18} color={isDark ? "#d4d4d4" : "#525252"} />
+                </Pressable>
+                <Pressable
+                  accessibilityLabel="Select model"
+                  accessibilityRole="button"
+                  disabled={!effectiveModel}
+                  onPress={() => setModelSelectorOpen(true)}
+                  className="mr-2 flex-1 flex-row items-center gap-2 rounded-full py-2"
+                >
+                  <ProviderIcon
+                    driver={selectedModelOption?.providerDriver ?? effectiveModel?.instanceId ?? ""}
+                    label={selectedModelOption?.providerLabel ?? effectiveModel?.model ?? "AI"}
+                    size={20}
+                  />
+                  <Text className="max-w-[70%] text-sm font-semibold text-muted" numberOfLines={1}>
+                    {effectiveModel?.model ?? "T3 Code"}
+                  </Text>
+                  <AppIcon name="chevron-down" size={15} color={isDark ? "#858585" : "#737373"} />
+                </Pressable>
+                {thinkingDescriptors.length > 0 ? (
+                  <Pressable
+                    accessibilityLabel="Thinking options"
+                    accessibilityRole="button"
+                    disabled={!effectiveModel}
+                    onPress={() => setThinkingSelectorOpen(true)}
+                    className="mr-2 max-w-[32%] rounded-full bg-default px-3 py-2"
+                  >
+                    <Text className="text-xs font-semibold text-muted" numberOfLines={1}>
+                      {thinkingLabel}
+                    </Text>
+                  </Pressable>
+                ) : null}
+                <Pressable
+                  accessibilityLabel={busy ? "Stop running agent" : "Send message"}
+                  accessibilityRole="button"
+                  disabled={!busy && !canSend}
+                  onPress={() => void (busy ? interruptTurn() : submit())}
+                  className={`h-8 w-8 items-center justify-center rounded-full ${
+                    busy ? "bg-danger" : canSend ? "bg-accent" : "bg-default"
+                  }`}
+                >
+                  <AppIcon
+                    name={busy ? "stop" : "arrow-up"}
+                    size={busy ? 17 : 18}
+                    color={busy || canSend ? "#ffffff" : isDark ? "#737373" : "#a3a3a3"}
+                    strokeWidth={2.3}
+                  />
+                </Pressable>
+              </View>
+            </View>
+          </FloatingBottomChrome>
+        }
+      >
         <KeyboardChatScrollView
           ref={scrollRef}
           className="flex-1"
@@ -651,8 +751,8 @@ export function ThreadScreen() {
           contentContainerStyle={{
             gap: 16,
             paddingHorizontal: 12,
-            paddingBottom: 16,
-            paddingTop: 8,
+            paddingBottom: bottomChromeHeight + 12,
+            paddingTop: headerHeight + 4,
           }}
           keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"
@@ -727,104 +827,7 @@ export function ThreadScreen() {
             )
           )}
         </KeyboardChatScrollView>
-
-        <FloatingBottomChrome onHeightChange={setBottomChromeHeight}>
-          {sendError || modelError || attachmentError ? (
-            <View className="mb-2 rounded-xl bg-danger-soft px-3 py-2">
-              <Text className="text-xs leading-5 text-danger">
-                {sendError ?? modelError ?? attachmentError}
-              </Text>
-            </View>
-          ) : null}
-          <View className="min-h-28 rounded-[20px] border border-border bg-surface px-3 pb-2.5 pt-2.5">
-            {selectedAttachments.length > 0 ? (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                className="mb-3"
-                contentContainerStyle={{ gap: 8 }}
-              >
-                {selectedAttachments.map((attachment) => (
-                  <ComposerImageAttachment
-                    key={attachment.key}
-                    attachment={attachment}
-                    onRemove={() => removeAttachment(attachment.key)}
-                  />
-                ))}
-              </ScrollView>
-            ) : null}
-            <TextInput
-              value={draft}
-              onChangeText={(value) => {
-                draftEditedRef.current = true;
-                draftRef.current = value;
-                setDraft(value);
-              }}
-              multiline
-              placeholder={busy ? "Queue a follow-up..." : "Ask for follow-up changes..."}
-              placeholderTextColor={isDark ? "#737373" : "#9a9a9a"}
-              className="max-h-24 min-h-14 text-[14px] leading-5 text-foreground"
-              textAlignVertical="top"
-            />
-            <View className="mt-2 flex-row items-center">
-              <Pressable
-                accessibilityLabel="Attach images"
-                accessibilityRole="button"
-                onPress={() => void addImages()}
-                className="mr-2 h-8 w-8 items-center justify-center rounded-full bg-default"
-              >
-                <AppIcon name="image" size={18} color={isDark ? "#d4d4d4" : "#525252"} />
-              </Pressable>
-              <Pressable
-                accessibilityLabel="Select model"
-                accessibilityRole="button"
-                disabled={!effectiveModel}
-                onPress={() => setModelSelectorOpen(true)}
-                className="mr-2 flex-1 flex-row items-center gap-2 rounded-full py-2"
-              >
-                <ProviderIcon
-                  driver={selectedModelOption?.providerDriver ?? effectiveModel?.instanceId ?? ""}
-                  label={selectedModelOption?.providerLabel ?? effectiveModel?.model ?? "AI"}
-                  size={20}
-                />
-                <Text className="max-w-[70%] text-sm font-semibold text-muted" numberOfLines={1}>
-                  {effectiveModel?.model ?? "T3 Code"}
-                </Text>
-                <AppIcon name="chevron-down" size={15} color={isDark ? "#858585" : "#737373"} />
-              </Pressable>
-              {thinkingDescriptors.length > 0 ? (
-                <Pressable
-                  accessibilityLabel="Thinking options"
-                  accessibilityRole="button"
-                  disabled={!effectiveModel}
-                  onPress={() => setThinkingSelectorOpen(true)}
-                  className="mr-2 max-w-[32%] rounded-full bg-default px-3 py-2"
-                >
-                  <Text className="text-xs font-semibold text-muted" numberOfLines={1}>
-                    {thinkingLabel}
-                  </Text>
-                </Pressable>
-              ) : null}
-              <Pressable
-                accessibilityLabel={busy ? "Stop running agent" : "Send message"}
-                accessibilityRole="button"
-                disabled={!busy && !canSend}
-                onPress={() => void (busy ? interruptTurn() : submit())}
-                className={`h-8 w-8 items-center justify-center rounded-full ${
-                  busy ? "bg-danger" : canSend ? "bg-accent" : "bg-default"
-                }`}
-              >
-                <AppIcon
-                  name={busy ? "stop" : "arrow-up"}
-                  size={busy ? 17 : 18}
-                  color={busy || canSend ? "#ffffff" : isDark ? "#737373" : "#a3a3a3"}
-                  strokeWidth={2.3}
-                />
-              </Pressable>
-            </View>
-          </View>
-        </FloatingBottomChrome>
-      </View>
+      </BlurScreenRoot>
       {effectiveModel ? (
         <ModelSelectorDrawer
           lockedProvider={hasExistingConversation}

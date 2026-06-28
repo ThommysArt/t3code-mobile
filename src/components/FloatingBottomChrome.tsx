@@ -1,8 +1,11 @@
 import type { ReactNode } from "react";
+import { useState } from "react";
 import { StyleSheet, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
 import { KeyboardStickyView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { ProgressiveBlurEdge } from "@/components/ProgressiveBlurEdge";
+import { useChromeTheme } from "@/components/chrome/useChromeTheme";
 import {
   BOTTOM_CHROME_HORIZONTAL_PADDING,
   BOTTOM_CHROME_TOP_PADDING,
@@ -15,28 +18,40 @@ export function FloatingBottomChrome(props: {
   readonly style?: StyleProp<ViewStyle>;
 }) {
   const insets = useSafeAreaInsets();
+  const theme = useChromeTheme();
+  const [chromeHeight, setChromeHeight] = useState(0);
 
   const handleLayout = (event: LayoutChangeEvent) => {
-    props.onHeightChange?.(event.nativeEvent.layout.height);
+    const height = event.nativeEvent.layout.height;
+    setChromeHeight(height);
+    props.onHeightChange?.(height);
   };
+
+  const fadeHeight = Math.max(Math.round(chromeHeight * 1.64), 96);
 
   return (
     <KeyboardStickyView style={styles.sticky} offset={{ closed: 0, opened: 0 }}>
-      <View
-        pointerEvents="box-none"
-        onLayout={handleLayout}
-        style={[
-          styles.chrome,
-          {
-            paddingHorizontal: BOTTOM_CHROME_HORIZONTAL_PADDING,
-            paddingTop: BOTTOM_CHROME_TOP_PADDING,
-            paddingBottom: bottomChromePaddingBottom(insets),
-          },
-          props.style,
-        ]}
+      <ProgressiveBlurEdge
+        backgroundColor={theme.background}
+        edge="bottom"
+        fadeHeight={fadeHeight}
       >
-        {props.children}
-      </View>
+        <View
+          pointerEvents="box-none"
+          onLayout={handleLayout}
+          style={[
+            styles.chrome,
+            {
+              paddingHorizontal: BOTTOM_CHROME_HORIZONTAL_PADDING,
+              paddingTop: BOTTOM_CHROME_TOP_PADDING,
+              paddingBottom: bottomChromePaddingBottom(insets),
+            },
+            props.style,
+          ]}
+        >
+          {props.children}
+        </View>
+      </ProgressiveBlurEdge>
     </KeyboardStickyView>
   );
 }

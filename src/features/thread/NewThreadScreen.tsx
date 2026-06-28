@@ -20,6 +20,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon } from "@/components/AppIcon";
+import { BlurScreenRoot, HeaderBubble } from "@/components/chrome";
+import { useChromeTheme } from "@/components/chrome/useChromeTheme";
 import { FloatingBottomChrome } from "@/components/FloatingBottomChrome";
 import { ProviderIcon } from "@/components/ProviderIcon";
 import { Screen } from "@/components/Screen";
@@ -179,6 +181,8 @@ export function NewThreadScreen() {
   const [bottomChromeHeight, setBottomChromeHeight] = useState(() =>
     estimatedComposerChromeHeight(insets)
   );
+  const [headerHeight, setHeaderHeight] = useState(insets.top + 52);
+  const theme = useChromeTheme();
   const branchEditedRef = useRef(false);
   const modeEditedRef = useRef(false);
   const modelEditedRef = useRef(false);
@@ -368,37 +372,24 @@ export function NewThreadScreen() {
       : undefined;
 
   return (
-    <Screen edges={["top", "left", "right"]}>
-      <View className="flex-row items-center gap-3 border-b border-separator px-4 pb-2 pt-2">
-        <Pressable
-          onPress={() => router.back()}
-          className="h-10 w-10 items-center justify-center rounded-full bg-default"
-        >
-          <AppIcon name="back" size={21} color={isDark ? "#f5f5f5" : "#262626"} />
-        </Pressable>
-        <View className="flex-1">
-          <Text className="text-[17px] font-bold text-foreground" numberOfLines={1}>
-            New thread
-          </Text>
-          <Text className="mt-0.5 text-xs text-muted" numberOfLines={1}>
-            {project.title}
-          </Text>
-        </View>
-      </View>
-
-      <View style={{ flex: 1 }}>
-        <TextInput
-          autoFocus
-          multiline
-          value={prompt}
-          onChangeText={setPrompt}
-          placeholder={`Describe a coding task in ${project.title}`}
-          placeholderTextColor={isDark ? "#737373" : "#9a9a9a"}
-          textAlignVertical="top"
-          className="flex-1 px-4 py-4 text-[14px] leading-5 text-foreground"
-          style={{ paddingBottom: bottomChromeHeight + 8 }}
-        />
-        <FloatingBottomChrome onHeightChange={setBottomChromeHeight}>
+    <Screen edges={["left", "right"]}>
+      <BlurScreenRoot
+        onHeaderHeightChange={setHeaderHeight}
+        header={
+          <>
+            <HeaderBubble accessibilityLabel="Go back" onPress={() => router.back()} variant="icon">
+              <AppIcon name="back" size={21} color={theme.foreground} />
+            </HeaderBubble>
+            <HeaderBubble
+              style={{ flex: 1 }}
+              subtitle={project.title}
+              title="New thread"
+              variant="title"
+            />
+          </>
+        }
+        footer={
+          <FloatingBottomChrome onHeightChange={setBottomChromeHeight}>
           {error || attachmentError ? (
             <View className="mb-2 rounded-xl bg-danger-soft px-3 py-2">
               <Text className="text-xs leading-5 text-danger">{error ?? attachmentError}</Text>
@@ -521,7 +512,20 @@ export function NewThreadScreen() {
             </Pressable>
           </View>
         </FloatingBottomChrome>
-      </View>
+        }
+      >
+        <TextInput
+          autoFocus
+          multiline
+          value={prompt}
+          onChangeText={setPrompt}
+          placeholder={`Describe a coding task in ${project.title}`}
+          placeholderTextColor={isDark ? "#737373" : "#9a9a9a"}
+          textAlignVertical="top"
+          className="flex-1 px-4 py-4 text-[14px] leading-5 text-foreground"
+          style={{ paddingBottom: bottomChromeHeight + 12, paddingTop: headerHeight + 4 }}
+        />
+      </BlurScreenRoot>
 
       {selectedModel ? (
         <ModelSelectorDrawer

@@ -1,4 +1,3 @@
-import { BlurView, type BlurViewProps } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import type { PropsWithChildren } from "react";
 import { StyleSheet, View, type ViewStyle } from "react-native";
@@ -21,158 +20,65 @@ function alpha(color: string, opacity: number): string {
   return `rgba(${red}, ${green}, ${blue}, ${opacity})`;
 }
 
+/**
+ * Progressive fade overlay — same approach as tanap event cards:
+ * a LinearGradient band that softens scrolling content behind chrome.
+ */
 export function ProgressiveBlurEdge({
   backgroundColor,
-  blurTarget,
   children,
   edge,
-  height,
-  isDark,
+  fadeHeight,
   style,
 }: PropsWithChildren<{
   readonly backgroundColor: string;
-  readonly blurTarget?: BlurViewProps["blurTarget"];
   readonly edge: Edge;
-  readonly height: number;
-  readonly isDark: boolean;
+  readonly fadeHeight: number;
   readonly style?: ViewStyle;
 }>) {
-  const tint = isDark ? "systemMaterialDark" : "systemMaterialLight";
   const fadeColors =
     edge === "top"
-      ? [alpha(backgroundColor, 0.72), alpha(backgroundColor, 0.22), alpha(backgroundColor, 0)]
-      : [alpha(backgroundColor, 0), alpha(backgroundColor, 0.22), alpha(backgroundColor, 0.72)];
+      ? ([
+          alpha(backgroundColor, 0.96),
+          alpha(backgroundColor, 0.68),
+          alpha(backgroundColor, 0),
+        ] as const)
+      : ([
+          alpha(backgroundColor, 0),
+          alpha(backgroundColor, 0.68),
+          alpha(backgroundColor, 0.96),
+        ] as const);
 
   return (
     <View
+      pointerEvents="box-none"
       style={[
         styles.edge,
         edge === "top" ? styles.top : styles.bottom,
-        { height, pointerEvents: "box-none" },
+        { minHeight: fadeHeight },
         style,
       ]}
     >
-      <View style={[StyleSheet.absoluteFill, styles.inert]}>
-        <BlurView
-          blurMethod="dimezisBlurViewSdk31Plus"
-          blurReductionFactor={1.8}
-          blurTarget={blurTarget}
-          intensity={42}
-          tint={tint}
-          style={[StyleSheet.absoluteFill, styles.softBlur]}
-        />
-        <LinearGradient
-          colors={fadeColors as [string, string, string]}
-          locations={[0, 0.62, 1]}
-          style={[StyleSheet.absoluteFill, styles.inert]}
-        />
-      </View>
-      {children}
-    </View>
-  );
-}
-
-export function BlurredSurface({
-  backgroundColor,
-  blurTarget,
-  borderColor,
-  children,
-  intensity = 100,
-  isDark,
-  radius,
-  style,
-}: PropsWithChildren<{
-  readonly backgroundColor: string;
-  readonly blurTarget?: BlurViewProps["blurTarget"];
-  readonly borderColor?: string;
-  readonly intensity?: number;
-  readonly isDark: boolean;
-  readonly radius: number;
-  readonly style?: ViewStyle;
-}>) {
-  const tint = isDark ? "systemThinMaterialDark" : "systemThinMaterialLight";
-
-  return (
-    <View
-      style={[
-        styles.surface,
-        {
-          borderColor,
-          borderRadius: radius,
-          borderWidth: borderColor ? StyleSheet.hairlineWidth : 0,
-        },
-        style,
-      ]}
-    >
-      <BlurView
-        blurMethod="dimezisBlurViewSdk31Plus"
-        blurReductionFactor={1}
-        blurTarget={blurTarget}
-        intensity={intensity}
-        tint={tint}
-        style={[StyleSheet.absoluteFill, styles.surfaceBlur]}
-      />
-      <BlurView
-        blurMethod="dimezisBlurViewSdk31Plus"
-        blurReductionFactor={1}
-        blurTarget={blurTarget}
-        intensity={intensity}
-        tint={tint}
-        style={[StyleSheet.absoluteFill, styles.surfaceBlurBoost]}
-      />
-      <BlurView
-        blurMethod="dimezisBlurViewSdk31Plus"
-        blurReductionFactor={1}
-        blurTarget={blurTarget}
-        intensity={intensity}
-        tint={tint}
-        style={[StyleSheet.absoluteFill, styles.surfaceBlurBoostExtra]}
+      <LinearGradient
+        colors={fadeColors}
+        end={{ x: 0.5, y: 1 }}
+        locations={[0, 0.42, 1]}
+        pointerEvents="none"
+        start={{ x: 0.5, y: 0 }}
+        style={[
+          styles.gradient,
+          edge === "top" ? { height: fadeHeight, top: 0 } : { bottom: 0, height: fadeHeight },
+        ]}
       />
       <View
+        pointerEvents="box-none"
         style={[
-          StyleSheet.absoluteFill,
-          { backgroundColor: alpha(backgroundColor, isDark ? 0.34 : 0.46) },
+          styles.content,
+          edge === "top" ? styles.topContent : styles.bottomContent,
         ]}
-      />
-      {children}
-    </View>
-  );
-}
-
-export function BlurredHeader({
-  backgroundColor,
-  blurTarget,
-  children,
-  isDark,
-  style,
-}: PropsWithChildren<{
-  readonly backgroundColor: string;
-  readonly blurTarget?: BlurViewProps["blurTarget"];
-  readonly isDark: boolean;
-  readonly style?: ViewStyle;
-}>) {
-  const tint = isDark ? "systemMaterialDark" : "systemMaterialLight";
-
-  return (
-    <View style={[styles.header, style]}>
-      <BlurView
-        blurMethod="dimezisBlurViewSdk31Plus"
-        blurReductionFactor={1.8}
-        blurTarget={blurTarget}
-        intensity={76}
-        tint={tint}
-        style={[StyleSheet.absoluteFill, styles.headerBlur]}
-      />
-      <LinearGradient
-        colors={[
-          alpha(backgroundColor, isDark ? 0.7 : 0.82),
-          alpha(backgroundColor, isDark ? 0.3 : 0.38),
-          alpha(backgroundColor, 0),
-        ]}
-        locations={[0, 0.72, 1]}
-        style={[StyleSheet.absoluteFill, styles.inert]}
-      />
-      {children}
+      >
+        {children}
+      </View>
     </View>
   );
 }
@@ -180,7 +86,6 @@ export function BlurredHeader({
 const styles = StyleSheet.create({
   edge: {
     left: 0,
-    overflow: "hidden",
     position: "absolute",
     right: 0,
     zIndex: 20,
@@ -190,34 +95,21 @@ const styles = StyleSheet.create({
   },
   bottom: {
     bottom: 0,
+    justifyContent: "flex-end",
   },
-  inert: {
-    pointerEvents: "none",
+  gradient: {
+    left: 0,
+    position: "absolute",
+    right: 0,
+    zIndex: 0,
   },
-  softBlur: {
-    opacity: 0.44,
-    pointerEvents: "none",
+  content: {
+    zIndex: 1,
   },
-  surface: {
-    overflow: "hidden",
+  topContent: {
+    width: "100%",
   },
-  surfaceBlur: {
-    opacity: 1,
-    pointerEvents: "none",
-  },
-  surfaceBlurBoost: {
-    opacity: 0.85,
-    pointerEvents: "none",
-  },
-  surfaceBlurBoostExtra: {
-    opacity: 0.55,
-    pointerEvents: "none",
-  },
-  header: {
-    overflow: "hidden",
-  },
-  headerBlur: {
-    opacity: 0.72,
-    pointerEvents: "none",
+  bottomContent: {
+    width: "100%",
   },
 });

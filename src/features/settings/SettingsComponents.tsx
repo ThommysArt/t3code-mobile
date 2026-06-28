@@ -14,6 +14,9 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon } from "@/components/AppIcon";
+import { HeaderBubble } from "@/components/chrome";
+import { useBlurScreen } from "@/components/chrome/BlurScreenContext";
+import { useChromeTheme } from "@/components/chrome/useChromeTheme";
 import { bottomChromePaddingBottom } from "@/utils/bottomChrome";
 
 export function SettingsScreenHeader(props: {
@@ -22,24 +25,25 @@ export function SettingsScreenHeader(props: {
   readonly action?: ReactNode;
 }) {
   const router = useRouter();
-  const isDark = useColorScheme() === "dark";
+  const theme = useChromeTheme();
 
   return (
-    <View className="flex-row items-center gap-3 border-b border-separator px-4 pb-2 pt-2">
-      <Pressable
+    <>
+      <HeaderBubble
+        accessibilityLabel="Go back"
         onPress={() => router.back()}
-        className="h-10 w-10 items-center justify-center rounded-full bg-default"
+        variant="icon"
       >
-        <AppIcon name="back" size={21} color={isDark ? "#f5f5f5" : "#262626"} />
-      </Pressable>
-      <View className="flex-1">
-        <Text className="text-[17px] font-bold text-foreground">{props.title}</Text>
-        {props.subtitle ? (
-          <Text className="text-[11px] text-muted">{props.subtitle}</Text>
-        ) : null}
-      </View>
+        <AppIcon name="back" size={21} color={theme.foreground} />
+      </HeaderBubble>
+      <HeaderBubble
+        style={{ flex: 1 }}
+        subtitle={props.subtitle}
+        title={props.title}
+        variant="title"
+      />
       {props.action}
-    </View>
+    </>
   );
 }
 
@@ -48,6 +52,7 @@ export function SettingsScroll(props: {
   readonly contentContainerStyle?: StyleProp<ViewStyle>;
 }) {
   const insets = useSafeAreaInsets();
+  const { headerHeight } = useBlurScreen();
   const isDark = useColorScheme() === "dark";
   const background = isDark ? "#090909" : "#f4f4f5";
 
@@ -60,7 +65,7 @@ export function SettingsScroll(props: {
           gap: 16,
           paddingHorizontal: 12,
           paddingBottom: bottomChromePaddingBottom(insets) + 16,
-          paddingTop: 8,
+          paddingTop: headerHeight + 4,
         },
         props.contentContainerStyle,
       ]}

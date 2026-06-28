@@ -11,6 +11,8 @@ import {
 
 import { ConnectionBanner } from "@/components/ConnectionBanner";
 import { ProviderIcon } from "@/components/ProviderIcon";
+import { BlurScreenRoot, HeaderBubble } from "@/components/chrome";
+import { useChromeTheme } from "@/components/chrome/useChromeTheme";
 import { Screen } from "@/components/Screen";
 import { AppIcon } from "@/components/AppIcon";
 import { useEnvironments } from "@/runtime/EnvironmentProvider";
@@ -33,6 +35,7 @@ import {
 
 export function ProvidersScreen() {
   const isDark = useColorScheme() === "dark";
+  const theme = useChromeTheme();
   const { getClient } = useEnvironments();
   const { primaryEnvironment, readyEnvironments, selectEnvironment } = usePrimaryEnvironment();
   const environmentId = primaryEnvironment?.connection.environmentId ?? null;
@@ -94,32 +97,38 @@ export function ProvidersScreen() {
   );
 
   const headerAction = (
-    <View className="flex-row items-center gap-2">
+    <>
       {lastCheckedAt ? (
-        <Text className="text-[11px] text-muted">Checked {relativeTime(lastCheckedAt)} ago</Text>
+        <HeaderBubble variant="action">
+          <Text className="text-[11px] text-muted">Checked {relativeTime(lastCheckedAt)} ago</Text>
+        </HeaderBubble>
       ) : null}
-      <Pressable
+      <HeaderBubble
+        accessibilityLabel="Refresh providers"
         disabled={!isLive || isRefreshingProviders}
         onPress={() => void refreshProviders()}
-        className="h-10 w-10 items-center justify-center rounded-full border border-border bg-surface"
-        style={{ opacity: !isLive || isRefreshingProviders ? 0.5 : 1 }}
+        variant="icon"
       >
         {isRefreshingProviders ? (
           <ActivityIndicator size="small" color="#f97316" />
         ) : (
-          <AppIcon name="refresh" size={19} color={isDark ? "#f5f5f5" : "#262626"} />
+          <AppIcon name="refresh" size={19} color={theme.foreground} />
         )}
-      </Pressable>
-    </View>
+      </HeaderBubble>
+    </>
   );
 
   return (
-    <Screen edges={["top", "left", "right"]}>
-      <SettingsScreenHeader
-        title="Providers"
-        subtitle="Manage installed providers on the connected server"
-        action={headerAction}
-      />
+    <Screen edges={["left", "right"]}>
+      <BlurScreenRoot
+        header={
+          <SettingsScreenHeader
+            title="Providers"
+            subtitle="Manage installed providers on the connected server"
+            action={headerAction}
+          />
+        }
+      >
       <SettingsScroll>
         <EnvironmentPicker
           environments={readyEnvironments.map((environment) => ({
@@ -209,6 +218,7 @@ export function ProvidersScreen() {
           )}
         </SettingsSection>
       </SettingsScroll>
+      </BlurScreenRoot>
     </Screen>
   );
 }

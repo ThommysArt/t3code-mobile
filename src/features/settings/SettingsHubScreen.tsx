@@ -1,5 +1,6 @@
 import { Text, View } from "react-native";
 
+import { BlurScreenRoot } from "@/components/chrome";
 import { Screen } from "@/components/Screen";
 import { useEnvironments } from "@/runtime/EnvironmentProvider";
 
@@ -15,8 +16,8 @@ export function SettingsHubScreen() {
   const { environments } = useEnvironments();
 
   return (
-    <Screen edges={["top", "left", "right"]}>
-      <SettingsScreenHeader title="Settings" subtitle="Configure T3 Code Mobile" />
+    <Screen edges={["left", "right"]}>
+      <BlurScreenRoot header={<SettingsScreenHeader title="Settings" subtitle="Configure T3 Code Mobile" />}>
       <SettingsScroll>
         <SettingsSection title="General">
           <SettingsNavRow label="General" href="/settings/general" />
@@ -41,6 +42,7 @@ export function SettingsHubScreen() {
           </Text>
         </View>
       </SettingsScroll>
+      </BlurScreenRoot>
     </Screen>
   );
 }

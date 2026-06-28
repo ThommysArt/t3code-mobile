@@ -11,6 +11,9 @@ import {
 
 import { AppIcon } from "@/components/AppIcon";
 import { ConnectionBanner } from "@/components/ConnectionBanner";
+import { HeaderBubble } from "@/components/chrome";
+import { BlurScreenRoot } from "@/components/chrome";
+import { useChromeTheme } from "@/components/chrome/useChromeTheme";
 import { Screen } from "@/components/Screen";
 import { useEnvironments } from "@/runtime/EnvironmentProvider";
 import { useArchivedThreads } from "@/runtime/useArchivedThreads";
@@ -44,6 +47,7 @@ interface ArchivedProjectGroup {
 
 export function ArchivesScreen() {
   const isDark = useColorScheme() === "dark";
+  const theme = useChromeTheme();
   const { dispatchCommand, getClient } = useEnvironments();
   const { readyEnvironments, selectEnvironment } = usePrimaryEnvironment();
   const [selectedEnvironmentId, setSelectedEnvironmentId] = useState<EnvironmentId | null>(null);
@@ -117,25 +121,29 @@ export function ArchivesScreen() {
   };
 
   return (
-    <Screen edges={["top", "left", "right"]}>
-      <SettingsScreenHeader
-        title="Archives"
-        subtitle="Browse and restore archived threads"
-        action={
-          <Pressable
-            disabled={!hasLiveConnection || isLoading}
-            onPress={() => void refresh()}
-            className="h-10 w-10 items-center justify-center rounded-full border border-border bg-surface"
-            style={{ opacity: !hasLiveConnection || isLoading ? 0.5 : 1 }}
-          >
-            {isLoading ? (
-              <ActivityIndicator size="small" color="#f97316" />
-            ) : (
-              <AppIcon name="refresh" size={19} color={isDark ? "#f5f5f5" : "#262626"} />
-            )}
-          </Pressable>
+    <Screen edges={["left", "right"]}>
+      <BlurScreenRoot
+        header={
+          <SettingsScreenHeader
+            title="Archives"
+            subtitle="Browse and restore archived threads"
+            action={
+              <HeaderBubble
+                accessibilityLabel="Refresh archives"
+                disabled={!hasLiveConnection || isLoading}
+                onPress={() => void refresh()}
+                variant="icon"
+              >
+                {isLoading ? (
+                  <ActivityIndicator size="small" color="#f97316" />
+                ) : (
+                  <AppIcon name="refresh" size={19} color={theme.foreground} />
+                )}
+              </HeaderBubble>
+            }
+          />
         }
-      />
+      >
       <SettingsScroll>
         <EnvironmentPicker
           environments={readyEnvironments.map((environment) => ({
@@ -205,6 +213,7 @@ export function ArchivesScreen() {
           ))
         )}
       </SettingsScroll>
+      </BlurScreenRoot>
     </Screen>
   );
 }

@@ -29,6 +29,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon } from "@/components/AppIcon";
+import { BlurScreenRoot, HeaderBubble } from "@/components/chrome";
+import { useChromeTheme } from "@/components/chrome/useChromeTheme";
 import { bottomChromePaddingBottom } from "@/utils/bottomChrome";
 import { ConnectionBanner } from "@/components/ConnectionBanner";
 import { Screen } from "@/components/Screen";
@@ -132,6 +134,8 @@ export function GitScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const isDark = useColorScheme() === "dark";
+  const theme = useChromeTheme();
+  const [headerHeight, setHeaderHeight] = useState(insets.top + 52);
   const { toast } = useToast();
   const environmentIdRaw = firstParam(params.environmentId);
   const threadIdRaw = firstParam(params.threadId);
@@ -420,47 +424,52 @@ export function GitScreen() {
   ]);
 
   return (
-    <Screen edges={["top", "left", "right"]}>
-      <View className="flex-row items-center gap-3 border-b border-separator px-4 pb-2 pt-2">
-        <Pressable
-          accessibilityLabel="Go back"
-          accessibilityRole="button"
-          onPress={() => router.back()}
-          className="h-10 w-10 items-center justify-center rounded-full bg-default"
-        >
-          <AppIcon name="back" size={21} color={isDark ? "#f5f5f5" : "#262626"} />
-        </Pressable>
-        <View className="flex-1">
-          <Text className="text-[17px] font-bold text-foreground">Source control</Text>
-          <Text className="text-[11px] text-muted" numberOfLines={1}>
-            {status?.refName ?? thread?.branch ?? shell?.branch ?? "Checking branch..."}
-          </Text>
-        </View>
-        <Button
-          size="sm"
-          variant="secondary"
-          isDisabled={busy || git.isPending}
-          onPress={() => void git.refresh()}
-        >
-          Refresh
-        </Button>
-      </View>
-
-      <KeyboardAvoidingView
-        className="flex-1"
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
+    <Screen edges={["left", "right"]}>
+      <BlurScreenRoot
+        onHeaderHeightChange={setHeaderHeight}
+        header={
+          <>
+            <HeaderBubble
+              accessibilityLabel="Go back"
+              onPress={() => router.back()}
+              variant="icon"
+            >
+              <AppIcon name="back" size={21} color={theme.foreground} />
+            </HeaderBubble>
+            <HeaderBubble
+              style={{ flex: 1 }}
+              subtitle={status?.refName ?? thread?.branch ?? shell?.branch ?? "Checking branch..."}
+              title="Source control"
+              variant="title"
+            />
+            <HeaderBubble
+              accessibilityLabel="Refresh git status"
+              disabled={busy || git.isPending}
+              onPress={() => void git.refresh()}
+              variant="action"
+            >
+              <Text style={{ color: theme.foreground, fontSize: 13, fontWeight: "600" }}>
+                Refresh
+              </Text>
+            </HeaderBubble>
+          </>
+        }
       >
-        <ScrollView
+        <KeyboardAvoidingView
           className="flex-1"
           style={{ flex: 1 }}
-          contentContainerStyle={{
-            gap: 16,
-            paddingHorizontal: 12,
-            paddingTop: 8,
-            paddingBottom: bottomChromePaddingBottom(insets) + 280,
-          }}
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
+        >
+          <ScrollView
+            className="flex-1"
+            style={{ flex: 1 }}
+            contentContainerStyle={{
+              gap: 16,
+              paddingHorizontal: 12,
+              paddingTop: headerHeight + 4,
+              paddingBottom: bottomChromePaddingBottom(insets) + 280,
+            }}
           keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"
           automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
@@ -681,7 +690,8 @@ export function GitScreen() {
           </Card>
         ) : null}
         </ScrollView>
-      </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
+      </BlurScreenRoot>
     </Screen>
   );
 }
