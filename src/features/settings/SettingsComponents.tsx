@@ -11,8 +11,10 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon } from "@/components/AppIcon";
+import { bottomChromePaddingBottom } from "@/utils/bottomChrome";
 
 export function SettingsScreenHeader(props: {
   readonly title: string;
@@ -23,7 +25,7 @@ export function SettingsScreenHeader(props: {
   const isDark = useColorScheme() === "dark";
 
   return (
-    <View className="flex-row items-center gap-3 border-b border-separator px-3 pb-3 pt-2">
+    <View className="flex-row items-center gap-3 border-b border-separator px-4 pb-2 pt-2">
       <Pressable
         onPress={() => router.back()}
         className="h-10 w-10 items-center justify-center rounded-full bg-default"
@@ -31,9 +33,9 @@ export function SettingsScreenHeader(props: {
         <AppIcon name="back" size={21} color={isDark ? "#f5f5f5" : "#262626"} />
       </Pressable>
       <View className="flex-1">
-        <Text className="text-lg font-bold text-foreground">{props.title}</Text>
+        <Text className="text-[17px] font-bold text-foreground">{props.title}</Text>
         {props.subtitle ? (
-          <Text className="text-xs text-muted">{props.subtitle}</Text>
+          <Text className="text-[11px] text-muted">{props.subtitle}</Text>
         ) : null}
       </View>
       {props.action}
@@ -45,6 +47,7 @@ export function SettingsScroll(props: {
   readonly children: ReactNode;
   readonly contentContainerStyle?: StyleProp<ViewStyle>;
 }) {
+  const insets = useSafeAreaInsets();
   const isDark = useColorScheme() === "dark";
   const background = isDark ? "#090909" : "#f4f4f5";
 
@@ -54,10 +57,10 @@ export function SettingsScroll(props: {
       style={{ flex: 1, backgroundColor: background }}
       contentContainerStyle={[
         {
-          gap: 20,
-          paddingHorizontal: 16,
-          paddingBottom: 40,
-          paddingTop: 18,
+          gap: 16,
+          paddingHorizontal: 12,
+          paddingBottom: bottomChromePaddingBottom(insets) + 16,
+          paddingTop: 8,
         },
         props.contentContainerStyle,
       ]}
@@ -76,12 +79,12 @@ export function SettingsSection(props: {
   return (
     <View className="gap-2">
       <View className="flex-row items-center justify-between px-1">
-        <Text className="text-xs font-bold uppercase tracking-[0.8px] text-muted">
+        <Text className="text-[12px] font-bold uppercase tracking-[0.6px] text-muted">
           {props.title}
         </Text>
         {props.action}
       </View>
-      <View className="overflow-hidden rounded-[28px] border border-border bg-surface">
+      <View className="overflow-hidden rounded-[20px] border border-border bg-surface">
         {props.children}
       </View>
     </View>
@@ -103,10 +106,10 @@ export function SettingsNavRow(props: {
   return (
     <Pressable
       onPress={() => router.push(props.href as never)}
-      className="flex-row items-center gap-3 px-4 py-4"
+      className="flex-row items-center gap-3 px-4 py-3"
       style={{ opacity: 1 }}
     >
-      <Text className="flex-1 text-base text-foreground">{props.label}</Text>
+      <Text className="flex-1 text-sm text-foreground">{props.label}</Text>
       {props.value ? (
         <Text className="max-w-[120px] text-sm text-muted" numberOfLines={1}>
           {props.value}
@@ -128,14 +131,14 @@ export function SettingsRow(props: {
 
   return (
     <View
-      className="gap-3 px-4 py-4"
+      className="gap-2 px-4 py-3"
       style={{ opacity: props.disabled ? 0.5 : 1 }}
     >
-      <View className={stacked ? "flex-col gap-3" : "flex-row items-start gap-3"}>
+      <View className={stacked ? "flex-col gap-2" : "flex-row items-start gap-3"}>
         <View className="flex-1 gap-1">
-          <Text className="text-base font-semibold text-foreground">{props.title}</Text>
+          <Text className="text-sm font-semibold text-foreground">{props.title}</Text>
           {props.description ? (
-            <Text className="text-sm leading-5 text-muted">{props.description}</Text>
+            <Text className="text-xs leading-5 text-muted">{props.description}</Text>
           ) : null}
         </View>
         {props.control}
@@ -185,7 +188,7 @@ export function SettingsPickerButton(props: {
 
 export function SettingsLoadingRow(props: { readonly label: string }) {
   return (
-    <View className="flex-row items-center gap-3 px-4 py-5">
+    <View className="flex-row items-center gap-3 px-4 py-4">
       <ActivityIndicator color="#f97316" />
       <Text className="text-sm text-muted">{props.label}</Text>
     </View>
@@ -205,7 +208,7 @@ export function EnvironmentPicker(props: {
 
   return (
     <View className="gap-2">
-      <Text className="px-1 text-xs font-bold uppercase tracking-[0.8px] text-muted">Server</Text>
+      <Text className="px-1 text-[12px] font-bold uppercase tracking-[0.6px] text-muted">Server</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
         {props.environments.map((environment) => {
           const selected = environment.environmentId === props.selectedEnvironmentId;

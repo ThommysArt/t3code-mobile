@@ -2,6 +2,7 @@ import { Stack } from "expo-router";
 import { HeroUINativeProvider } from "heroui-native";
 import { useColorScheme } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 
@@ -17,6 +18,7 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor }}>
       <SafeAreaProvider>
+        <KeyboardProvider>
         <HeroUINativeProvider
           config={{
             toast: {
@@ -40,6 +42,7 @@ export default function RootLayout() {
             </EnvironmentProvider>
           </PreferencesProvider>
         </HeroUINativeProvider>
+        </KeyboardProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

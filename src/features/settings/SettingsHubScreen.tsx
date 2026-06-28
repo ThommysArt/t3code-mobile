@@ -15,7 +15,7 @@ export function SettingsHubScreen() {
   const { environments } = useEnvironments();
 
   return (
-    <Screen>
+    <Screen edges={["top", "left", "right"]}>
       <SettingsScreenHeader title="Settings" subtitle="Configure T3 Code Mobile" />
       <SettingsScroll>
         <SettingsSection title="General">
@@ -35,7 +35,7 @@ export function SettingsHubScreen() {
         </SettingsSection>
 
         <View className="px-1">
-          <Text className="text-sm leading-5 text-muted">
+          <Text className="text-xs leading-5 text-muted">
             Server settings sync with your connected T3 environment. Local preferences stay on this
             device.
           </Text>

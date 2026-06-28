@@ -10,8 +10,6 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -22,11 +20,13 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon } from "@/components/AppIcon";
+import { FloatingBottomChrome } from "@/components/FloatingBottomChrome";
 import { ProviderIcon } from "@/components/ProviderIcon";
 import { Screen } from "@/components/Screen";
 import { useEnvironments } from "@/runtime/EnvironmentProvider";
 import { usePreferences } from "@/runtime/PreferencesProvider";
 import { useServerSettings } from "@/runtime/useServerSettings";
+import { estimatedComposerChromeHeight } from "@/utils/bottomChrome";
 import { newId } from "@/utils/id";
 import { randomHex } from "@/utils/randomHex";
 import {
@@ -176,6 +176,9 @@ export function NewThreadScreen() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [bottomChromeHeight, setBottomChromeHeight] = useState(() =>
+    estimatedComposerChromeHeight(insets)
+  );
   const branchEditedRef = useRef(false);
   const modeEditedRef = useRef(false);
   const modelEditedRef = useRef(false);
@@ -348,7 +351,7 @@ export function NewThreadScreen() {
     return (
       <Screen>
         <View className="flex-1 items-center justify-center gap-3 px-6">
-          <Text className="text-lg font-bold text-foreground">Project unavailable</Text>
+          <Text className="text-[17px] font-bold text-foreground">Project unavailable</Text>
           <Pressable onPress={() => router.back()} className="rounded-full bg-default px-4 py-2.5">
             <Text className="font-semibold text-foreground">Go back</Text>
           </Pressable>
@@ -366,7 +369,7 @@ export function NewThreadScreen() {
 
   return (
     <Screen edges={["top", "left", "right"]}>
-      <View className="flex-row items-center gap-3 border-b border-separator px-3 pb-3 pt-2">
+      <View className="flex-row items-center gap-3 border-b border-separator px-4 pb-2 pt-2">
         <Pressable
           onPress={() => router.back()}
           className="h-10 w-10 items-center justify-center rounded-full bg-default"
@@ -383,10 +386,7 @@ export function NewThreadScreen() {
         </View>
       </View>
 
-      <KeyboardAvoidingView
-        className="flex-1"
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >
+      <View style={{ flex: 1 }}>
         <TextInput
           autoFocus
           multiline
@@ -395,12 +395,10 @@ export function NewThreadScreen() {
           placeholder={`Describe a coding task in ${project.title}`}
           placeholderTextColor={isDark ? "#737373" : "#9a9a9a"}
           textAlignVertical="top"
-          className="flex-1 px-5 py-5 text-[18px] leading-7 text-foreground"
+          className="flex-1 px-4 py-4 text-[14px] leading-5 text-foreground"
+          style={{ paddingBottom: bottomChromeHeight + 8 }}
         />
-        <View
-          className="px-3 pt-3"
-          style={{ paddingBottom: Math.max(insets.bottom, 8) }}
-        >
+        <FloatingBottomChrome onHeightChange={setBottomChromeHeight}>
           {error || attachmentError ? (
             <View className="mb-2 rounded-xl bg-danger-soft px-3 py-2">
               <Text className="text-xs leading-5 text-danger">{error ?? attachmentError}</Text>
@@ -455,9 +453,9 @@ export function NewThreadScreen() {
               accessibilityRole="button"
               accessibilityLabel="Attach images"
               onPress={() => void addImages()}
-              className="h-10 w-10 items-center justify-center rounded-full bg-default"
+              className="h-8 w-8 items-center justify-center rounded-full bg-default"
             >
-              <AppIcon name="image" size={18} color={isDark ? "#d4d4d4" : "#525252"} />
+              <AppIcon name="image" size={16} color={isDark ? "#d4d4d4" : "#525252"} />
             </Pressable>
             <Pressable
               accessibilityRole="button"
@@ -507,7 +505,7 @@ export function NewThreadScreen() {
             <Pressable
               disabled={!canSubmit}
               onPress={() => void submit()}
-              className={`h-10 w-10 items-center justify-center rounded-full ${
+              className={`h-8 w-8 items-center justify-center rounded-full ${
                 canSubmit ? "bg-accent" : "bg-default"
               }`}
             >
@@ -522,8 +520,8 @@ export function NewThreadScreen() {
               )}
             </Pressable>
           </View>
-        </View>
-      </KeyboardAvoidingView>
+        </FloatingBottomChrome>
+      </View>
 
       {selectedModel ? (
         <ModelSelectorDrawer

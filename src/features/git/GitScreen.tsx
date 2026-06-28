@@ -29,6 +29,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon } from "@/components/AppIcon";
+import { bottomChromePaddingBottom } from "@/utils/bottomChrome";
 import { ConnectionBanner } from "@/components/ConnectionBanner";
 import { Screen } from "@/components/Screen";
 import { useEnvironments } from "@/runtime/EnvironmentProvider";
@@ -419,8 +420,8 @@ export function GitScreen() {
   ]);
 
   return (
-    <Screen>
-      <View className="flex-row items-center gap-3 border-b border-divider px-4 pb-3 pt-1">
+    <Screen edges={["top", "left", "right"]}>
+      <View className="flex-row items-center gap-3 border-b border-separator px-4 pb-2 pt-2">
         <Pressable
           accessibilityLabel="Go back"
           accessibilityRole="button"
@@ -430,8 +431,8 @@ export function GitScreen() {
           <AppIcon name="back" size={21} color={isDark ? "#f5f5f5" : "#262626"} />
         </Pressable>
         <View className="flex-1">
-          <Text className="text-base font-semibold text-foreground">Source control</Text>
-          <Text className="text-xs text-muted" numberOfLines={1}>
+          <Text className="text-[17px] font-bold text-foreground">Source control</Text>
+          <Text className="text-[11px] text-muted" numberOfLines={1}>
             {status?.refName ?? thread?.branch ?? shell?.branch ?? "Checking branch..."}
           </Text>
         </View>
@@ -448,7 +449,7 @@ export function GitScreen() {
       <KeyboardAvoidingView
         className="flex-1"
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}
       >
         <ScrollView
@@ -456,9 +457,9 @@ export function GitScreen() {
           style={{ flex: 1 }}
           contentContainerStyle={{
             gap: 16,
-            paddingHorizontal: 16,
-            paddingTop: 16,
-            paddingBottom: Math.max(insets.bottom, 16) + 280,
+            paddingHorizontal: 12,
+            paddingTop: 8,
+            paddingBottom: bottomChromePaddingBottom(insets) + 280,
           }}
           keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"

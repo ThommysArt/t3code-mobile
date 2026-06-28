@@ -5,10 +5,8 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
-  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -16,13 +14,17 @@ import {
   useColorScheme,
   View,
 } from "react-native";
+import { KeyboardChatScrollView } from "react-native-keyboard-controller";
+import type Reanimated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon } from "@/components/AppIcon";
+import { FloatingBottomChrome } from "@/components/FloatingBottomChrome";
 import { ProviderIcon } from "@/components/ProviderIcon";
 import { Screen } from "@/components/Screen";
 import { loadThreadDraft, saveThreadDraft } from "@/runtime/db";
 import { useThread } from "@/runtime/useThread";
+import { estimatedComposerChromeHeight } from "@/utils/bottomChrome";
 import { relativeTime } from "@/utils/time";
 import {
   attachmentHeaders,
@@ -415,7 +417,10 @@ export function ThreadScreen() {
   const [selectedModel, setSelectedModel] = useState<ModelSelection | null>(null);
   const [modelError, setModelError] = useState<string | null>(null);
   const [expandedWorkLogs, setExpandedWorkLogs] = useState<ReadonlySet<string>>(new Set());
-  const scrollRef = useRef<ScrollView>(null);
+  const [bottomChromeHeight, setBottomChromeHeight] = useState(() =>
+    estimatedComposerChromeHeight(insets)
+  );
+  const scrollRef = useRef<Reanimated.ScrollView>(null);
   const stickToBottomRef = useRef(true);
   const feed = useMemo(
     () => buildThreadFeed(messages, thread?.activities ?? [], thread?.checkpoints ?? []),
@@ -604,7 +609,7 @@ export function ThreadScreen() {
 
   return (
     <Screen edges={["top", "left", "right"]}>
-      <View className="flex-row items-center gap-3 border-b border-separator px-3 pb-3 pt-2">
+      <View className="flex-row items-center gap-3 border-b border-separator px-4 pb-2 pt-2">
         <Pressable
           onPress={() => router.back()}
           className="h-10 w-10 items-center justify-center rounded-full bg-default"
@@ -636,24 +641,21 @@ export function ThreadScreen() {
         </Pressable>
       </View>
 
-      <KeyboardAvoidingView
-        className="flex-1"
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >
-        <ScrollView
+      <View style={{ flex: 1 }}>
+        <KeyboardChatScrollView
           ref={scrollRef}
           className="flex-1"
           style={{ flex: 1 }}
+          offset={bottomChromeHeight}
+          keyboardLiftBehavior="always"
           contentContainerStyle={{
-            gap: 22,
-            paddingHorizontal: 18,
-            paddingBottom: 24,
-            paddingTop: 18,
+            gap: 16,
+            paddingHorizontal: 12,
+            paddingBottom: 16,
+            paddingTop: 8,
           }}
           keyboardDismissMode="interactive"
           keyboardShouldPersistTaps="handled"
-          automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
           scrollEventThrottle={32}
           onScroll={updateStickToBottom}
           onContentSizeChange={scrollToBottomIfPinned}
@@ -724,12 +726,9 @@ export function ThreadScreen() {
               <ChangedFilesCard key={entry.id} entry={entry} />
             )
           )}
-        </ScrollView>
+        </KeyboardChatScrollView>
 
-        <View
-          className="px-3 pt-3"
-          style={{ paddingBottom: Math.max(insets.bottom, 8) }}
-        >
+        <FloatingBottomChrome onHeightChange={setBottomChromeHeight}>
           {sendError || modelError || attachmentError ? (
             <View className="mb-2 rounded-xl bg-danger-soft px-3 py-2">
               <Text className="text-xs leading-5 text-danger">
@@ -737,7 +736,7 @@ export function ThreadScreen() {
               </Text>
             </View>
           ) : null}
-          <View className="min-h-32 rounded-[28px] border border-border bg-surface px-4 pb-3 pt-3">
+          <View className="min-h-28 rounded-[20px] border border-border bg-surface px-3 pb-2.5 pt-2.5">
             {selectedAttachments.length > 0 ? (
               <ScrollView
                 horizontal
@@ -764,7 +763,7 @@ export function ThreadScreen() {
               multiline
               placeholder={busy ? "Queue a follow-up..." : "Ask for follow-up changes..."}
               placeholderTextColor={isDark ? "#737373" : "#9a9a9a"}
-              className="max-h-28 min-h-16 text-[16px] leading-6 text-foreground"
+              className="max-h-24 min-h-14 text-[14px] leading-5 text-foreground"
               textAlignVertical="top"
             />
             <View className="mt-2 flex-row items-center">
@@ -772,7 +771,7 @@ export function ThreadScreen() {
                 accessibilityLabel="Attach images"
                 accessibilityRole="button"
                 onPress={() => void addImages()}
-                className="mr-2 h-9 w-9 items-center justify-center rounded-full bg-default"
+                className="mr-2 h-8 w-8 items-center justify-center rounded-full bg-default"
               >
                 <AppIcon name="image" size={18} color={isDark ? "#d4d4d4" : "#525252"} />
               </Pressable>
@@ -811,7 +810,7 @@ export function ThreadScreen() {
                 accessibilityRole="button"
                 disabled={!busy && !canSend}
                 onPress={() => void (busy ? interruptTurn() : submit())}
-                className={`h-9 w-9 items-center justify-center rounded-full ${
+                className={`h-8 w-8 items-center justify-center rounded-full ${
                   busy ? "bg-danger" : canSend ? "bg-accent" : "bg-default"
                 }`}
               >
@@ -824,8 +823,8 @@ export function ThreadScreen() {
               </Pressable>
             </View>
           </View>
-        </View>
-      </KeyboardAvoidingView>
+        </FloatingBottomChrome>
+      </View>
       {effectiveModel ? (
         <ModelSelectorDrawer
           lockedProvider={hasExistingConversation}

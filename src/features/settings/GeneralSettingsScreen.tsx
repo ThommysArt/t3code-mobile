@@ -90,7 +90,7 @@ function OptionSheet<T extends string | number>(props: {
           enableDynamicSizing={false}
           backgroundClassName="bg-background"
         >
-          <BottomSheet.Title className="px-5 pb-3 pt-1 text-lg font-bold text-foreground">
+          <BottomSheet.Title className="px-4 pb-3 pt-1 text-[17px] font-bold text-foreground">
             {props.title}
           </BottomSheet.Title>
           <View className="gap-1 px-3 pb-6">
@@ -106,7 +106,7 @@ function OptionSheet<T extends string | number>(props: {
                   className={`rounded-2xl px-4 py-3 ${selected ? "bg-accent-soft" : "bg-default"}`}
                 >
                   <Text
-                    className={`text-base ${selected ? "font-semibold text-accent" : "text-foreground"}`}
+                    className={`text-sm ${selected ? "font-semibold text-accent" : "text-foreground"}`}
                   >
                     {option.label}
                   </Text>
@@ -258,7 +258,7 @@ export function GeneralSettingsScreen() {
   const serverControlsDisabled = !isLive || !settings || isLoading;
 
   return (
-    <Screen>
+    <Screen edges={["top", "left", "right"]}>
       <SettingsScreenHeader title="General" subtitle="Mobile and server preferences" />
       <SettingsScroll>
         <EnvironmentPicker

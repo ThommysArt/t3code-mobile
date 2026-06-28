@@ -17,7 +17,9 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon } from "@/components/AppIcon";
+import { FloatingBottomChrome } from "@/components/FloatingBottomChrome";
 import { Screen } from "@/components/Screen";
+import { estimatedSearchChromeHeight } from "@/utils/bottomChrome";
 import { useEnvironments } from "@/runtime/EnvironmentProvider";
 import { usePreferences } from "@/runtime/PreferencesProvider";
 import { logStatus } from "@/runtime/statusLog";
@@ -202,6 +204,9 @@ export function HomeScreen() {
   const collapsedThreadLimit = preferences.sidebarThreadPreviewCount;
   const [search, setSearch] = useState("");
   const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(new Set());
+  const [bottomChromeHeight, setBottomChromeHeight] = useState(() =>
+    estimatedSearchChromeHeight(insets)
+  );
   const hasLoggedViewportRef = useRef(false);
 
   const groups = useMemo<readonly ProjectGroup[]>(() => {
@@ -335,18 +340,20 @@ export function HomeScreen() {
         </View>
       ) : null}
 
-      <ScrollView
-        onLayout={handleCatalogLayout}
-        style={{ flex: 1, width: "100%", backgroundColor: background }}
-        contentContainerStyle={{
-          gap: 16,
-          paddingHorizontal: 12,
-          paddingTop: 8,
-          paddingBottom: Math.max(insets.bottom, 8) + 64,
-        }}
-        keyboardDismissMode="on-drag"
-        showsVerticalScrollIndicator={false}
-      >
+      <View style={{ flex: 1 }}>
+        <ScrollView
+          onLayout={handleCatalogLayout}
+          style={{ flex: 1, width: "100%", backgroundColor: background }}
+          contentContainerStyle={{
+            gap: 16,
+            paddingHorizontal: 12,
+            paddingTop: 8,
+            paddingBottom: bottomChromeHeight + 8,
+          }}
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
         {isBootstrapping ? (
           <View className="items-center gap-3 rounded-3xl border border-border bg-surface px-5 py-10">
             <ActivityIndicator color="#f97316" />
@@ -493,22 +500,16 @@ export function HomeScreen() {
             );
           })
         )}
-      </ScrollView>
+        </ScrollView>
 
-      <View
-        style={{
-          position: "absolute",
-          right: 0,
-          bottom: 0,
-          left: 0,
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 12,
-          paddingHorizontal: 14,
-          paddingTop: 6,
-          paddingBottom: Math.max(insets.bottom, 8),
-        }}
-      >
+        <FloatingBottomChrome onHeightChange={setBottomChromeHeight}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 12,
+          }}
+        >
         <View
           style={{
             height: 46,
@@ -550,6 +551,8 @@ export function HomeScreen() {
         >
           <AppIcon name="refresh" size={19} color={isDark ? "#f5f5f5" : "#262626"} />
         </Pressable>
+        </View>
+        </FloatingBottomChrome>
       </View>
     </Screen>
   );

@@ -117,7 +117,7 @@ export function ArchivesScreen() {
   };
 
   return (
-    <Screen>
+    <Screen edges={["top", "left", "right"]}>
       <SettingsScreenHeader
         title="Archives"
         subtitle="Browse and restore archived threads"
@@ -181,10 +181,10 @@ export function ArchivesScreen() {
                 <View key={`${thread.environmentId}:${thread.threadId}`}>
                   {index > 0 ? <SettingsDivider /> : null}
                   <View className="gap-3 px-4 py-4">
-                    <Text className="text-base font-semibold text-foreground" numberOfLines={2}>
+                    <Text className="text-sm font-semibold text-foreground" numberOfLines={2}>
                       {thread.title}
                     </Text>
-                    <Text className="text-sm text-muted">
+                    <Text className="text-xs text-muted">
                       Archived {formatRelativeTimeLabel(thread.archivedAt)} · Created{" "}
                       {formatRelativeTimeLabel(thread.createdAt)}
                     </Text>

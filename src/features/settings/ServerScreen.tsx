@@ -13,8 +13,10 @@ import {
   useColorScheme,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon } from "@/components/AppIcon";
+import { bottomChromePaddingBottom } from "@/utils/bottomChrome";
 import { Screen } from "@/components/Screen";
 import { SettingsScreenHeader } from "./SettingsComponents";
 import { StatusLogPanel } from "@/components/StatusLogPanel";
@@ -81,6 +83,7 @@ function connectionStepLabel(step: string): string {
 }
 
 export function ServerScreen() {
+  const insets = useSafeAreaInsets();
   const isDark = useColorScheme() === "dark";
   const {
     addConnection,
@@ -240,7 +243,7 @@ export function ServerScreen() {
   );
 
   return (
-    <Screen>
+    <Screen edges={["top", "left", "right"]}>
       <SettingsScreenHeader
         title="Server"
         subtitle="Pair, sync, and inspect server connections"
@@ -262,27 +265,27 @@ export function ServerScreen() {
         style={{ flex: 1, backgroundColor: palette.background }}
         contentContainerStyle={{
           flexGrow: 1,
-          gap: 20,
-          paddingHorizontal: 16,
-          paddingBottom: 40,
-          paddingTop: 18,
+          gap: 16,
+          paddingHorizontal: 12,
+          paddingBottom: bottomChromePaddingBottom(insets) + 16,
+          paddingTop: 8,
         }}
         keyboardShouldPersistTaps="handled"
       >
         <View
           collapsable={false}
-          className="gap-4 rounded-[28px] border border-border bg-surface p-4"
+          className="gap-4 rounded-[20px] border border-border bg-surface p-4"
           style={{ backgroundColor: palette.surface, borderColor: palette.border }}
         >
           <View>
-            <Text className="text-base font-bold text-foreground">Add a server</Text>
-            <Text className="mt-1 text-sm leading-5 text-muted">
+            <Text className="text-sm font-bold text-foreground">Add a server</Text>
+            <Text className="mt-1 text-xs leading-5 text-muted">
               Paste the full pairing link, or enter the Tailscale address and pairing code.
             </Text>
           </View>
 
           <View className="gap-2">
-            <Text className="text-xs font-bold uppercase tracking-[0.8px] text-muted">
+            <Text className="text-[12px] font-bold uppercase tracking-[0.6px] text-muted">
               Server or pairing URL
             </Text>
             {isLoadingDraft ? (
@@ -296,9 +299,9 @@ export function ServerScreen() {
                 keyboardType="url"
                 placeholder="100.100.10.20:3773 or full pairing link"
                 placeholderTextColor={isDark ? "#737373" : "#9a9a9a"}
-                className="min-h-13 rounded-2xl border border-border bg-background px-4 py-3 text-[15px] text-foreground"
+                className="min-h-11 rounded-2xl border border-border bg-background px-3 py-2.5 text-[14px] text-foreground"
                 style={{
-                  minHeight: 52,
+                  minHeight: 46,
                   backgroundColor: palette.input,
                   borderColor: palette.border,
                   color: isDark ? "#f5f5f5" : "#171717",
@@ -308,7 +311,7 @@ export function ServerScreen() {
           </View>
 
           <View className="gap-2">
-            <Text className="text-xs font-bold uppercase tracking-[0.8px] text-muted">
+            <Text className="text-[12px] font-bold uppercase tracking-[0.6px] text-muted">
               Pairing code
             </Text>
             <TextInput
@@ -318,9 +321,9 @@ export function ServerScreen() {
               autoCorrect={false}
               placeholder="Optional when included in the URL"
               placeholderTextColor={isDark ? "#737373" : "#9a9a9a"}
-              className="min-h-13 rounded-2xl border border-border bg-background px-4 py-3 text-[15px] text-foreground"
+              className="min-h-11 rounded-2xl border border-border bg-background px-3 py-2.5 text-[14px] text-foreground"
               style={{
-                minHeight: 52,
+                minHeight: 46,
                 backgroundColor: palette.input,
                 borderColor: palette.border,
                 color: isDark ? "#f5f5f5" : "#171717",
@@ -407,7 +410,7 @@ export function ServerScreen() {
               return (
                 <View
                   key={environment.connection.environmentId}
-                  className="gap-3 rounded-[28px] border border-border bg-surface p-4"
+                  className="gap-3 rounded-[20px] border border-border bg-surface p-4"
                   style={{ backgroundColor: palette.surface, borderColor: palette.border }}
                 >
                   <View className="flex-row items-start gap-3">
@@ -415,7 +418,7 @@ export function ServerScreen() {
                       <AppIcon name="terminal" size={21} color={tone.color} />
                     </View>
                     <View className="flex-1">
-                      <Text className="text-base font-bold text-foreground">
+                      <Text className="text-sm font-bold text-foreground">
                         {environment.connection.label}
                       </Text>
                       <Text className="mt-0.5 text-xs text-muted" numberOfLines={1}>
@@ -449,7 +452,7 @@ export function ServerScreen() {
                   </View>
 
                   <View className="gap-2">
-                    <Text className="text-xs font-bold uppercase tracking-[0.8px] text-muted">
+                    <Text className="text-[12px] font-bold uppercase tracking-[0.6px] text-muted">
                       Connection URL
                     </Text>
                     <TextInput
@@ -468,9 +471,9 @@ export function ServerScreen() {
                       keyboardType="url"
                       placeholder="100.100.10.20:3773"
                       placeholderTextColor={isDark ? "#737373" : "#9a9a9a"}
-                      className="rounded-2xl border border-border px-4 py-3 text-[15px] text-foreground"
+                      className="rounded-2xl border border-border px-3 py-2.5 text-[14px] text-foreground"
                       style={{
-                        minHeight: 52,
+                        minHeight: 46,
                         backgroundColor: palette.input,
                         borderColor: palette.border,
                         color: isDark ? "#f5f5f5" : "#171717",

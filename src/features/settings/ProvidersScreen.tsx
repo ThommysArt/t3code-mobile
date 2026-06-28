@@ -114,7 +114,7 @@ export function ProvidersScreen() {
   );
 
   return (
-    <Screen>
+    <Screen edges={["top", "left", "right"]}>
       <SettingsScreenHeader
         title="Providers"
         subtitle="Manage installed providers on the connected server"
@@ -178,7 +178,7 @@ export function ProvidersScreen() {
                       />
                       <View className="flex-1 gap-1">
                         <View className="flex-row flex-wrap items-center gap-2">
-                          <Text className="text-base font-semibold text-foreground">
+                          <Text className="text-sm font-semibold text-foreground">
                             {displayName}
                           </Text>
                           {version ? (
