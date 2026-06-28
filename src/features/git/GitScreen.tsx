@@ -14,7 +14,7 @@ import {
   type GitStackedAction,
 } from "@t3tools/contracts";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { Button, Card, Chip, Input, Toast, useToast } from "heroui-native";
+import { Card, Chip, Toast, useToast } from "heroui-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -31,6 +31,11 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AppIcon } from "@/components/AppIcon";
 import { BlurScreenRoot, HeaderBubble, HeaderSpacer } from "@/components/chrome";
 import { useChromeTheme } from "@/components/chrome/useChromeTheme";
+import {
+  SettingsPrimaryButton,
+  SettingsSecondaryButton,
+  SettingsTextArea,
+} from "@/features/settings/SettingsComponents";
 import { bottomChromePaddingBottom } from "@/utils/bottomChrome";
 import { ConnectionBanner } from "@/components/ConnectionBanner";
 import { Screen } from "@/components/Screen";
@@ -106,24 +111,12 @@ function withCommitOptions(
 function GitConfirmActionButton(props: {
   readonly label: string;
   readonly variant: "primary" | "secondary";
-  readonly isDark: boolean;
   readonly onPress: () => void;
 }) {
-  const iconColor = props.variant === "primary" ? "#ffffff" : props.isDark ? "#f0f0f0" : "#262626";
-
-  return (
-    <Button
-      size="sm"
-      variant={props.variant}
-      className="min-w-0 flex-1"
-      onPress={props.onPress}
-    >
-      <View className="flex-row items-center gap-1.5">
-        <AppIcon name="arrow-up" size={14} color={iconColor} />
-        <Button.Label>{props.label}</Button.Label>
-      </View>
-    </Button>
-  );
+  if (props.variant === "primary") {
+    return <SettingsPrimaryButton flex label={props.label} onPress={props.onPress} />;
+  }
+  return <SettingsSecondaryButton flex label={props.label} onPress={props.onPress} />;
 }
 
 export function GitScreen() {
@@ -218,7 +211,6 @@ export function GitScreen() {
                 <GitConfirmActionButton
                   label={branch}
                   variant="secondary"
-                  isDark={isDark}
                   onPress={() => {
                     finish("continue");
                     props.hide();
@@ -227,7 +219,6 @@ export function GitScreen() {
                 <GitConfirmActionButton
                   label="feature"
                   variant="primary"
-                  isDark={isDark}
                   onPress={() => {
                     finish("feature_branch");
                     props.hide();
@@ -448,7 +439,7 @@ export function GitScreen() {
               onPress={() => void git.refresh()}
               variant="action"
             >
-              <Text style={{ color: theme.foreground, fontSize: 13, fontWeight: "600" }}>
+              <Text style={{ color: theme.foreground, fontSize: 12, fontWeight: "600" }}>
                 Refresh
               </Text>
             </HeaderBubble>
@@ -522,7 +513,7 @@ export function GitScreen() {
               <Card.Title>Commit message</Card.Title>
               <Card.Description>Leave blank to let the server generate a message.</Card.Description>
             </View>
-            <Input
+            <SettingsTextArea
               value={commitMessage}
               onChangeText={setCommitMessage}
               placeholder="Describe the change"
@@ -530,43 +521,38 @@ export function GitScreen() {
           </Card.Body>
         </Card>
 
-        <View className="gap-3">
-          <Button
-            size="lg"
-            isDisabled={quickAction.disabled || busy}
+        <View className="gap-2">
+          <SettingsPrimaryButton
+            disabled={quickAction.disabled || busy}
+            label={quickAction.label}
             onPress={() => void runQuickAction()}
-          >
-            {quickAction.label}
-          </Button>
+          />
 
-          <View className="flex-row gap-3">
+          <View className="flex-row gap-2">
             {menuItems.map((item) => {
               const noCommitFiles = item.id === "commit" && selectedFiles.length === 0;
               return (
-                <View key={item.id} className="flex-1">
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    isDisabled={item.disabled || noCommitFiles}
-                    onPress={() => {
-                      if (item.kind === "open_pr") {
-                        const url = status?.pr?.state === "open" ? status.pr.url : null;
-                        if (url) void Linking.openURL(url);
-                        return;
-                      }
-                      if (item.dialogAction) {
-                        void runAction(
-                          withCommitOptions(
-                            { action: item.dialogAction },
-                            { commitMessage, selectedFiles, files }
-                          )
-                        );
-                      }
-                    }}
-                  >
-                    {item.label}
-                  </Button>
-                </View>
+                <SettingsSecondaryButton
+                  key={item.id}
+                  disabled={item.disabled || noCommitFiles}
+                  flex
+                  label={item.label}
+                  onPress={() => {
+                    if (item.kind === "open_pr") {
+                      const url = status?.pr?.state === "open" ? status.pr.url : null;
+                      if (url) void Linking.openURL(url);
+                      return;
+                    }
+                    if (item.dialogAction) {
+                      void runAction(
+                        withCommitOptions(
+                          { action: item.dialogAction },
+                          { commitMessage, selectedFiles, files }
+                        )
+                      );
+                    }
+                  }}
+                />
               );
             })}
           </View>
@@ -584,21 +570,15 @@ export function GitScreen() {
                 </View>
                 <View className="flex-row items-center gap-2">
                   {!allFilesSelected && isEditingFiles ? (
-                    <Pressable
+                    <SettingsSecondaryButton
+                      label="Reset"
                       onPress={() => setExcludedFiles(new Set())}
-                      className="rounded-full bg-default px-3 py-2"
-                    >
-                      <Text className="text-[11px] font-bold uppercase text-foreground">Reset</Text>
-                    </Pressable>
+                    />
                   ) : null}
-                  <Pressable
+                  <SettingsSecondaryButton
+                    label={isEditingFiles ? "Done" : "Edit"}
                     onPress={() => setIsEditingFiles((current) => !current)}
-                    className="rounded-full bg-default px-3 py-2"
-                  >
-                    <Text className="text-[11px] font-bold uppercase text-foreground">
-                      {isEditingFiles ? "Done" : "Edit"}
-                    </Text>
-                  </Pressable>
+                  />
                 </View>
               </View>
 

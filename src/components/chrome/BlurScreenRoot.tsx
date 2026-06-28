@@ -6,6 +6,7 @@ import { BlurScreenProvider } from "./BlurScreenContext";
 import { FloatingScreenHeader } from "./FloatingScreenHeader";
 
 const DEFAULT_HEADER_CONTENT_HEIGHT = 48;
+const HEADER_CONTENT_GAP = 4;
 
 export function BlurScreenRoot(props: {
   readonly children: ReactNode;
@@ -15,7 +16,7 @@ export function BlurScreenRoot(props: {
 }) {
   const insets = useSafeAreaInsets();
   const [headerHeight, setHeaderHeight] = useState(
-    insets.top + DEFAULT_HEADER_CONTENT_HEIGHT + 4
+    insets.top + DEFAULT_HEADER_CONTENT_HEIGHT + HEADER_CONTENT_GAP
   );
 
   const handleHeaderHeightChange = (height: number) => {

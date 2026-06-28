@@ -404,7 +404,7 @@ export function HomeScreen() {
           contentContainerStyle={{
             gap: 16,
             paddingHorizontal: 12,
-            paddingTop: headerHeight + 4,
+            paddingTop: headerHeight + 2,
             paddingBottom: bottomChromeHeight + 8,
           }}
           keyboardDismissMode="on-drag"

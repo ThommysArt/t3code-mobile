@@ -6,22 +6,27 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Pressable,
   ScrollView,
   Text,
-  TextInput,
   useColorScheme,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon } from "@/components/AppIcon";
 import { BlurScreenRoot, HeaderBubble } from "@/components/chrome";
 
 import { useChromeTheme } from "@/components/chrome/useChromeTheme";
-import { bottomChromePaddingBottom } from "@/utils/bottomChrome";
 import { Screen } from "@/components/Screen";
-import { SettingsScreenHeader } from "./SettingsComponents";
+import {
+  SettingsDangerButton,
+  SettingsFieldLabel,
+  SettingsPrimaryButton,
+  SettingsScreenHeader,
+  SettingsScroll,
+  SettingsSecondaryButton,
+  SettingsSection,
+  SettingsTextInput,
+} from "./SettingsComponents";
 import { StatusLogPanel } from "@/components/StatusLogPanel";
 import {
   extractPairingUrlFromQrPayload,
@@ -86,7 +91,6 @@ function connectionStepLabel(step: string): string {
 }
 
 export function ServerScreen() {
-  const insets = useSafeAreaInsets();
   const theme = useChromeTheme();
   const isDark = useColorScheme() === "dark";
   const {
@@ -113,9 +117,6 @@ export function ServerScreen() {
   >({});
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const scrollRef = useRef<ScrollView>(null);
-  const palette = isDark
-    ? { background: "#090909", surface: "#171717", input: "#101010", border: "#303030" }
-    : { background: "#f4f4f5", surface: "#ffffff", input: "#f8f8f9", border: "#dedee2" };
   const isExpoGo = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
   const usesPlainHttp =
     (serverUrl.trim() ? normalizeHostInput(serverUrl).startsWith("http://") : false) ||
@@ -267,146 +268,93 @@ export function ServerScreen() {
           />
         }
       >
-      <ScrollView
-        ref={scrollRef}
-        className="flex-1"
-        style={{ flex: 1, backgroundColor: palette.background }}
-        contentContainerStyle={{
-          flexGrow: 1,
-          gap: 16,
-          paddingHorizontal: 12,
-          paddingBottom: bottomChromePaddingBottom(insets) + 16,
-          paddingTop: insets.top + 56,
-        }}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View
-          collapsable={false}
-          className="gap-4 rounded-[20px] border border-border bg-surface p-4"
-          style={{ backgroundColor: palette.surface, borderColor: palette.border }}
-        >
-          <View>
-            <Text className="text-sm font-bold text-foreground">Add a server</Text>
-            <Text className="mt-1 text-xs leading-5 text-muted">
+      <SettingsScroll scrollRef={scrollRef} keyboardShouldPersistTaps="handled">
+        <SettingsSection title="Add a server">
+          <View collapsable={false} className="gap-4 p-4">
+            <Text className="text-xs leading-5 text-muted">
               Paste the full pairing link, or enter the Tailscale address and pairing code.
             </Text>
-          </View>
 
-          <View className="gap-2">
-            <Text className="text-[12px] font-bold uppercase tracking-[0.6px] text-muted">
-              Server or pairing URL
-            </Text>
-            {isLoadingDraft ? (
-              <ActivityIndicator style={{ paddingVertical: 14 }} color="#f97316" />
-            ) : (
-              <TextInput
-                value={serverUrl}
-                onChangeText={setServerUrl}
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="url"
-                placeholder="100.100.10.20:3773 or full pairing link"
-                placeholderTextColor={isDark ? "#737373" : "#9a9a9a"}
-                className="min-h-11 rounded-2xl border border-border bg-background px-3 py-2.5 text-[14px] text-foreground"
-                style={{
-                  minHeight: 46,
-                  backgroundColor: palette.input,
-                  borderColor: palette.border,
-                  color: isDark ? "#f5f5f5" : "#171717",
-                }}
-              />
-            )}
-          </View>
-
-          <View className="gap-2">
-            <Text className="text-[12px] font-bold uppercase tracking-[0.6px] text-muted">
-              Pairing code
-            </Text>
-            <TextInput
-              value={pairingCode}
-              onChangeText={setPairingCode}
-              autoCapitalize="none"
-              autoCorrect={false}
-              placeholder="Optional when included in the URL"
-              placeholderTextColor={isDark ? "#737373" : "#9a9a9a"}
-              className="min-h-11 rounded-2xl border border-border bg-background px-3 py-2.5 text-[14px] text-foreground"
-              style={{
-                minHeight: 46,
-                backgroundColor: palette.input,
-                borderColor: palette.border,
-                color: isDark ? "#f5f5f5" : "#171717",
-              }}
-            />
-          </View>
-
-          {isExpoGo && usesPlainHttp ? (
-            <View className="rounded-2xl bg-warning-soft px-3 py-2.5">
-              <Text className="text-sm leading-5 text-warning">
-                Expo Go may block plain HTTP tailnet servers. Install this project&apos;s Android or
-                iOS development build before testing the connection.
-              </Text>
-            </View>
-          ) : null}
-
-          {error ? (
-            <View className="rounded-2xl bg-danger-soft px-3 py-2.5">
-              <Text className="text-sm leading-5 text-danger">{error}</Text>
-            </View>
-          ) : null}
-
-          <View className="flex-row gap-2">
-            <Pressable
-              disabled={isConnecting || isLoadingDraft || !serverUrl.trim()}
-              onPress={() => void connect()}
-              className={`h-12 flex-1 items-center justify-center rounded-full ${
-                isConnecting || isLoadingDraft || !serverUrl.trim() ? "bg-default" : "bg-accent"
-              }`}
-            >
-              <Text
-                className={`font-semibold ${
-                  isConnecting || isLoadingDraft || !serverUrl.trim()
-                    ? "text-muted"
-                    : "text-accent-foreground"
-                }`}
-              >
-                {isConnecting ? "Pairing..." : "Pair & connect"}
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => {
-                if (showScanner) setShowScanner(false);
-                else void openScanner();
-              }}
-              className="h-12 items-center justify-center rounded-full border border-border bg-default px-5"
-            >
-              <Text className="font-semibold text-foreground">
-                {showScanner ? "Hide" : "Scan QR"}
-              </Text>
-            </Pressable>
-          </View>
-
-          {showScanner ? (
-            <View className="overflow-hidden rounded-2xl">
-              {cameraPermission?.granted ? (
-                <CameraView
-                  barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
-                  onBarcodeScanned={handleQrScan}
-                  style={{ aspectRatio: 1, width: "100%" }}
-                />
+            <View className="gap-2">
+              <SettingsFieldLabel>Server or pairing URL</SettingsFieldLabel>
+              {isLoadingDraft ? (
+                <ActivityIndicator style={{ paddingVertical: 10 }} color="#f97316" />
               ) : (
-                <Pressable onPress={() => void openScanner()} className="bg-default px-4 py-8">
-                  <Text className="text-center font-semibold text-foreground">
-                    Allow camera access
-                  </Text>
-                </Pressable>
+                <SettingsTextInput
+                  value={serverUrl}
+                  onChangeText={setServerUrl}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="url"
+                  placeholder="100.100.10.20:3773 or full pairing link"
+                />
               )}
             </View>
-          ) : null}
-        </View>
+
+            <View className="gap-2">
+              <SettingsFieldLabel>Pairing code</SettingsFieldLabel>
+              <SettingsTextInput
+                value={pairingCode}
+                onChangeText={setPairingCode}
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder="Optional when included in the URL"
+              />
+            </View>
+
+            {isExpoGo && usesPlainHttp ? (
+              <View className="rounded-2xl bg-warning-soft px-3 py-2.5">
+                <Text className="text-sm leading-5 text-warning">
+                  Expo Go may block plain HTTP tailnet servers. Install this project&apos;s Android
+                  or iOS development build before testing the connection.
+                </Text>
+              </View>
+            ) : null}
+
+            {error ? (
+              <View className="rounded-2xl bg-danger-soft px-3 py-2.5">
+                <Text className="text-sm leading-5 text-danger">{error}</Text>
+              </View>
+            ) : null}
+
+            <View className="flex-row gap-2">
+              <SettingsPrimaryButton
+                disabled={isConnecting || isLoadingDraft || !serverUrl.trim()}
+                flex
+                label={isConnecting ? "Pairing..." : "Pair & connect"}
+                onPress={() => void connect()}
+              />
+              <SettingsSecondaryButton
+                label={showScanner ? "Hide" : "Scan QR"}
+                onPress={() => {
+                  if (showScanner) setShowScanner(false);
+                  else void openScanner();
+                }}
+              />
+            </View>
+
+            {showScanner ? (
+              <View className="overflow-hidden rounded-2xl">
+                {cameraPermission?.granted ? (
+                  <CameraView
+                    barcodeScannerSettings={{ barcodeTypes: ["qr"] }}
+                    onBarcodeScanned={handleQrScan}
+                    style={{ aspectRatio: 1, width: "100%" }}
+                  />
+                ) : (
+                  <SettingsSecondaryButton
+                    label="Allow camera access"
+                    onPress={() => void openScanner()}
+                  />
+                )}
+              </View>
+            ) : null}
+          </View>
+        </SettingsSection>
 
         {environments.length > 0 ? (
           <View className="gap-3">
-            <Text className="px-1 text-xs font-bold uppercase tracking-[0.8px] text-muted">
+            <Text className="px-1 text-[12px] font-bold uppercase tracking-[0.6px] text-muted">
               Saved servers
             </Text>
             {environments.map((environment) => {
@@ -419,14 +367,13 @@ export function ServerScreen() {
                 <View
                   key={environment.connection.environmentId}
                   className="gap-3 rounded-[20px] border border-border bg-surface p-4"
-                  style={{ backgroundColor: palette.surface, borderColor: palette.border }}
                 >
                   <View className="flex-row items-start gap-3">
-                    <View className="h-11 w-11 items-center justify-center rounded-2xl bg-default">
-                      <AppIcon name="terminal" size={21} color={tone.color} />
+                    <View className="h-10 w-10 items-center justify-center rounded-2xl bg-default">
+                      <AppIcon name="terminal" size={19} color={tone.color} />
                     </View>
-                    <View className="flex-1">
-                      <Text className="text-sm font-bold text-foreground">
+                    <View className="min-w-0 flex-1">
+                      <Text className="text-sm font-semibold text-foreground">
                         {environment.connection.label}
                       </Text>
                       <Text className="mt-0.5 text-xs text-muted" numberOfLines={1}>
@@ -443,7 +390,7 @@ export function ServerScreen() {
                     </View>
                   </View>
 
-                  <View className="flex-row gap-4">
+                  <View className="flex-row flex-wrap gap-3">
                     <Text className="text-xs text-muted">
                       {environment.snapshot?.threads.filter((thread) => thread.archivedAt == null)
                         .length ?? 0}{" "}
@@ -460,10 +407,8 @@ export function ServerScreen() {
                   </View>
 
                   <View className="gap-2">
-                    <Text className="text-[12px] font-bold uppercase tracking-[0.6px] text-muted">
-                      Connection URL
-                    </Text>
-                    <TextInput
+                    <SettingsFieldLabel>Connection URL</SettingsFieldLabel>
+                    <SettingsTextInput
                       value={
                         urlDraftByEnvironment[environment.connection.environmentId] ??
                         environment.connection.httpBaseUrl
@@ -478,14 +423,6 @@ export function ServerScreen() {
                       autoCorrect={false}
                       keyboardType="url"
                       placeholder="100.100.10.20:3773"
-                      placeholderTextColor={isDark ? "#737373" : "#9a9a9a"}
-                      className="rounded-2xl border border-border px-3 py-2.5 text-[14px] text-foreground"
-                      style={{
-                        minHeight: 46,
-                        backgroundColor: palette.input,
-                        borderColor: palette.border,
-                        color: isDark ? "#f5f5f5" : "#171717",
-                      }}
                     />
                     <Text className="text-xs text-muted">
                       {connectionStepLabel(environment.connectionStep)}
@@ -495,7 +432,7 @@ export function ServerScreen() {
                         {saveErrorByEnvironment[environment.connection.environmentId]}
                       </Text>
                     ) : null}
-                    <Pressable
+                    <SettingsPrimaryButton
                       disabled={
                         savingEnvironmentId !== null ||
                         !(
@@ -503,25 +440,13 @@ export function ServerScreen() {
                           environment.connection.httpBaseUrl
                         ).trim()
                       }
-                      onPress={() => void saveConnectionUrl(environment.connection.environmentId)}
-                      className={`h-12 items-center justify-center rounded-full ${
+                      label={
                         savingEnvironmentId === environment.connection.environmentId
-                          ? "bg-default"
-                          : "bg-accent"
-                      }`}
-                    >
-                      <Text
-                        className={`font-semibold ${
-                          savingEnvironmentId === environment.connection.environmentId
-                            ? "text-muted"
-                            : "text-accent-foreground"
-                        }`}
-                      >
-                        {savingEnvironmentId === environment.connection.environmentId
                           ? "Saving..."
-                          : "Save connection"}
-                      </Text>
-                    </Pressable>
+                          : "Save connection"
+                      }
+                      onPress={() => void saveConnectionUrl(environment.connection.environmentId)}
+                    />
                   </View>
 
                   {environment.error ? (
@@ -529,7 +454,9 @@ export function ServerScreen() {
                   ) : null}
 
                   <View className="flex-row gap-2">
-                    <Pressable
+                    <SettingsPrimaryButton
+                      flex
+                      label="Re-pair"
                       onPress={() => {
                         setServerUrl(environment.connection.httpBaseUrl);
                         setPairingCode("");
@@ -538,27 +465,20 @@ export function ServerScreen() {
                           scrollRef.current?.scrollTo({ y: 0, animated: true })
                         );
                       }}
-                      className="flex-1 items-center rounded-full bg-accent px-4 py-2.5"
-                    >
-                      <Text className="text-sm font-semibold text-accent-foreground">Re-pair</Text>
-                    </Pressable>
-                    <Pressable
+                    />
+                    <SettingsSecondaryButton
+                      label="Reconnect"
                       onPress={() => void reconnect(environment.connection.environmentId)}
-                      className="items-center rounded-full bg-default px-4 py-2.5"
-                    >
-                      <Text className="text-sm font-semibold text-foreground">Reconnect</Text>
-                    </Pressable>
-                    <Pressable
+                    />
+                    <SettingsDangerButton
+                      label="Remove"
                       onPress={() =>
                         confirmRemove(
                           environment.connection.environmentId,
                           environment.connection.label
                         )
                       }
-                      className="items-center rounded-full bg-danger-soft px-4 py-2.5"
-                    >
-                      <Text className="text-sm font-semibold text-danger">Remove</Text>
-                    </Pressable>
+                    />
                   </View>
                 </View>
               );
@@ -567,7 +487,7 @@ export function ServerScreen() {
         ) : null}
 
         <StatusLogPanel />
-      </ScrollView>
+      </SettingsScroll>
       </BlurScreenRoot>
     </Screen>
   );

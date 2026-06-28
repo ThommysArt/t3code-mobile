@@ -15,7 +15,7 @@ export function FloatingScreenHeader(props: {
 
   const handleLayout = (event: LayoutChangeEvent) => {
     const contentHeight = event.nativeEvent.layout.height;
-    props.onHeightChange?.(insets.top + contentHeight + 2);
+    props.onHeightChange?.(insets.top + contentHeight);
   };
 
   return (
@@ -30,12 +30,14 @@ export function FloatingScreenHeader(props: {
         onLayout={handleLayout}
         style={{
           alignItems: "center",
+          alignSelf: "flex-start",
           flexDirection: "row",
           gap: 8,
           justifyContent: "flex-start",
           paddingBottom: 4,
           paddingHorizontal: 14,
           paddingTop: 4,
+          width: "100%",
         }}
       >
         {props.children}

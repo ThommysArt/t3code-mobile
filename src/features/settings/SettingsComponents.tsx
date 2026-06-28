@@ -1,14 +1,16 @@
 import { useRouter } from "expo-router";
 import { Switch } from "heroui-native";
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 import {
   ActivityIndicator,
   Pressable,
   ScrollView,
   Text,
+  TextInput,
   useColorScheme,
   View,
   type StyleProp,
+  type TextInputProps,
   type ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -18,6 +20,10 @@ import { HeaderBubble, HeaderSpacer } from "@/components/chrome";
 import { useBlurScreen } from "@/components/chrome/BlurScreenContext";
 import { useChromeTheme } from "@/components/chrome/useChromeTheme";
 import { bottomChromePaddingBottom } from "@/utils/bottomChrome";
+
+export const FORM_CONTROL_HEIGHT = 40;
+export const FORM_FIELD_LABEL_CLASS =
+  "text-[12px] font-bold uppercase tracking-[0.6px] text-muted";
 
 export function SettingsScreenHeader(props: {
   readonly title: string;
@@ -50,6 +56,8 @@ export function SettingsScreenHeader(props: {
 export function SettingsScroll(props: {
   readonly children: ReactNode;
   readonly contentContainerStyle?: StyleProp<ViewStyle>;
+  readonly keyboardShouldPersistTaps?: "always" | "never" | "handled";
+  readonly scrollRef?: RefObject<ScrollView | null>;
 }) {
   const insets = useSafeAreaInsets();
   const { headerHeight } = useBlurScreen();
@@ -58,7 +66,9 @@ export function SettingsScroll(props: {
 
   return (
     <ScrollView
+      ref={props.scrollRef}
       className="flex-1"
+      keyboardShouldPersistTaps={props.keyboardShouldPersistTaps}
       style={{ flex: 1, backgroundColor: background }}
       contentContainerStyle={[
         {
@@ -163,6 +173,148 @@ export function SettingsSwitch(props: {
       isDisabled={props.disabled}
       onSelectedChange={props.onValueChange}
     />
+  );
+}
+
+export function SettingsFieldLabel(props: { readonly children: string }) {
+  return <Text className={FORM_FIELD_LABEL_CLASS}>{props.children}</Text>;
+}
+
+export function SettingsTextInput({ style, ...props }: TextInputProps) {
+  const theme = useChromeTheme();
+
+  return (
+    <TextInput
+      placeholderTextColor={theme.muted}
+      className="rounded-2xl border border-border px-3 text-sm text-foreground"
+      style={[
+        {
+          backgroundColor: theme.isDark ? "#101010" : "#f8f8f9",
+          borderColor: theme.border,
+          color: theme.foreground,
+          fontSize: 14,
+          height: FORM_CONTROL_HEIGHT,
+        },
+        style,
+      ]}
+      {...props}
+    />
+  );
+}
+
+export function SettingsTextArea({ style, ...props }: TextInputProps) {
+  const theme = useChromeTheme();
+
+  return (
+    <TextInput
+      multiline
+      placeholderTextColor={theme.muted}
+      textAlignVertical="top"
+      className="rounded-2xl border border-border px-3 py-2.5 text-sm text-foreground"
+      style={[
+        {
+          backgroundColor: theme.isDark ? "#101010" : "#f8f8f9",
+          borderColor: theme.border,
+          color: theme.foreground,
+          fontSize: 14,
+          minHeight: 80,
+        },
+        style,
+      ]}
+      {...props}
+    />
+  );
+}
+
+function settingsButtonClassName(
+  tone: "primary" | "secondary" | "danger",
+  disabled: boolean,
+  flex?: boolean
+): string {
+  const width = flex ? "flex-1" : "";
+  if (disabled) return `${width} h-10 items-center justify-center rounded-full bg-default px-4`;
+  switch (tone) {
+    case "primary":
+      return `${width} h-10 items-center justify-center rounded-full bg-accent px-4`;
+    case "danger":
+      return `${width} h-10 items-center justify-center rounded-full bg-danger-soft px-4`;
+    default:
+      return `${width} h-10 items-center justify-center rounded-full border border-border bg-default px-4`;
+  }
+}
+
+function settingsButtonTextClassName(
+  tone: "primary" | "secondary" | "danger",
+  disabled: boolean
+): string {
+  if (disabled) return "text-sm font-semibold text-muted";
+  switch (tone) {
+    case "primary":
+      return "text-sm font-semibold text-accent-foreground";
+    case "danger":
+      return "text-sm font-semibold text-danger";
+    default:
+      return "text-sm font-semibold text-foreground";
+  }
+}
+
+export function SettingsPrimaryButton(props: {
+  readonly label: string;
+  readonly disabled?: boolean;
+  readonly flex?: boolean;
+  readonly onPress: () => void;
+}) {
+  return (
+    <Pressable
+      disabled={props.disabled}
+      onPress={props.onPress}
+      className={settingsButtonClassName("primary", props.disabled === true, props.flex)}
+      style={{ opacity: props.disabled ? 0.72 : 1 }}
+    >
+      <Text className={settingsButtonTextClassName("primary", props.disabled === true)}>
+        {props.label}
+      </Text>
+    </Pressable>
+  );
+}
+
+export function SettingsSecondaryButton(props: {
+  readonly label: string;
+  readonly disabled?: boolean;
+  readonly flex?: boolean;
+  readonly onPress: () => void;
+}) {
+  return (
+    <Pressable
+      disabled={props.disabled}
+      onPress={props.onPress}
+      className={settingsButtonClassName("secondary", props.disabled === true, props.flex)}
+      style={{ opacity: props.disabled ? 0.72 : 1 }}
+    >
+      <Text className={settingsButtonTextClassName("secondary", props.disabled === true)}>
+        {props.label}
+      </Text>
+    </Pressable>
+  );
+}
+
+export function SettingsDangerButton(props: {
+  readonly label: string;
+  readonly disabled?: boolean;
+  readonly flex?: boolean;
+  readonly onPress: () => void;
+}) {
+  return (
+    <Pressable
+      disabled={props.disabled}
+      onPress={props.onPress}
+      className={settingsButtonClassName("danger", props.disabled === true, props.flex)}
+      style={{ opacity: props.disabled ? 0.72 : 1 }}
+    >
+      <Text className={settingsButtonTextClassName("danger", props.disabled === true)}>
+        {props.label}
+      </Text>
+    </Pressable>
   );
 }
 

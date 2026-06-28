@@ -107,6 +107,7 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   topContent: {
+    alignSelf: "flex-start",
     width: "100%",
   },
   bottomContent: {
