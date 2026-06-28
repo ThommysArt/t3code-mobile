@@ -1,9 +1,8 @@
-import { EnvironmentId, PROVIDER_DISPLAY_NAMES, ProviderInstanceId } from "@t3tools/contracts";
+import { EnvironmentId, ProviderInstanceId } from "@t3tools/contracts";
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  Pressable,
   Text,
   useColorScheme,
   View,
@@ -22,7 +21,17 @@ import { formatRemoteError, logStatus } from "@/runtime/statusLog";
 import { relativeTime } from "@/utils/time";
 
 import { buildProviderEnabledPatch } from "./providerSettings";
-import { getProviderSummary, getProviderVersionLabel } from "./providerStatus";
+import {
+  buildProviderRows,
+  getProviderRowStatusLabel,
+  getProviderStatusKey,
+  getProviderSummary,
+  getProviderVersionLabel,
+  isProviderRowBusy,
+  PROVIDER_STATUS_COLORS,
+  resolveConfiguredProviderEnabled,
+  type ProviderRowModel,
+} from "./providerStatus";
 import {
   EnvironmentPicker,
   SettingsDivider,
@@ -33,8 +42,147 @@ import {
   SettingsSwitch,
 } from "./SettingsComponents";
 
-export function ProvidersScreen() {
+function ProvidersStatusStrip(props: {
+  readonly isConnecting: boolean;
+  readonly isLoadingSettings: boolean;
+  readonly isRefreshingProviders: boolean;
+  readonly lastCheckedAt: string | null;
+  readonly providerCount: number;
+}) {
   const isDark = useColorScheme() === "dark";
+  const isBusy =
+    props.isConnecting || props.isLoadingSettings || props.isRefreshingProviders;
+
+  const { color, label } = useMemo(() => {
+    if (props.isConnecting) {
+      return {
+        color: isDark ? "#93c5fd" : "#2563eb",
+        label: "Connecting to server",
+      };
+    }
+    if (props.isRefreshingProviders) {
+      return {
+        color: isDark ? "#fb923c" : "#ea580c",
+        label: "Refreshing provider status",
+      };
+    }
+    if (props.isLoadingSettings) {
+      return {
+        color: isDark ? "#fb923c" : "#ea580c",
+        label: "Loading provider settings",
+      };
+    }
+    if (props.providerCount > 0 && props.lastCheckedAt) {
+      return {
+        color: isDark ? "#4ade80" : "#16a34a",
+        label: `Checked ${relativeTime(props.lastCheckedAt)} ago · ${props.providerCount} provider${
+          props.providerCount === 1 ? "" : "s"
+        }`,
+      };
+    }
+    if (props.providerCount > 0) {
+      return {
+        color: isDark ? "#60a5fa" : "#2563eb",
+        label: `${props.providerCount} provider${props.providerCount === 1 ? "" : "s"} reported`,
+      };
+    }
+    return {
+      color: isDark ? "#a3a3a3" : "#737373",
+      label: "Waiting for provider status",
+    };
+  }, [
+    isDark,
+    props.isConnecting,
+    props.isLoadingSettings,
+    props.isRefreshingProviders,
+    props.lastCheckedAt,
+    props.providerCount,
+  ]);
+
+  return (
+    <View className="flex-row items-center gap-1.5 px-1">
+      <View className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
+      <Text className="text-[11px] font-semibold text-muted">{label}</Text>
+      {isBusy ? <ActivityIndicator size="small" color={color} /> : null}
+    </View>
+  );
+}
+
+function ProviderRow(props: {
+  readonly configuredEnabled: boolean;
+  readonly displayName: string;
+  readonly driver: string;
+  readonly isLoadingSettings: boolean;
+  readonly isLive: boolean;
+  readonly isRefreshingProviders: boolean;
+  readonly liveProvider?: ProviderRowModel["liveProvider"];
+  readonly onToggle: (enabled: boolean) => void;
+  readonly settingsReady: boolean;
+}) {
+  const isDark = useColorScheme() === "dark";
+  const busy = isProviderRowBusy(props.liveProvider, {
+    isLoadingSettings: props.isLoadingSettings,
+    isRefreshingProviders: props.isRefreshingProviders,
+  });
+  const statusKey = busy
+    ? "checking"
+    : getProviderStatusKey(props.liveProvider, props.configuredEnabled);
+  const statusColor = PROVIDER_STATUS_COLORS[statusKey][isDark ? "dark" : "light"];
+  const summary = getProviderSummary(props.liveProvider);
+  const statusLabel = getProviderRowStatusLabel(props.liveProvider, {
+    isLoadingSettings: props.isLoadingSettings,
+    isRefreshingProviders: props.isRefreshingProviders,
+  });
+  const version = getProviderVersionLabel(props.liveProvider?.version);
+  const detail =
+    summary.detail && summary.detail !== statusLabel ? summary.detail : null;
+
+  return (
+    <View className="gap-3 px-4 py-4" style={{ opacity: busy ? 0.82 : 1 }}>
+      <View className="flex-row items-start gap-3">
+        <View>
+          <ProviderIcon driver={props.driver} label={props.displayName} size={28} />
+          <View
+            className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border border-surface"
+            style={{ backgroundColor: statusColor }}
+          />
+        </View>
+        <View className="min-w-0 flex-1 gap-1">
+          <View className="flex-row flex-wrap items-center gap-2">
+            <Text className="text-sm font-semibold text-foreground">{props.displayName}</Text>
+            {version ? <Text className="text-xs text-muted">{version}</Text> : null}
+            {props.liveProvider?.badgeLabel ? (
+              <View className="rounded-full bg-warning-soft px-2 py-0.5">
+                <Text className="text-[10px] font-bold uppercase tracking-wide text-warning">
+                  {props.liveProvider.badgeLabel}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+          <View className="flex-row items-center gap-1.5">
+            {busy ? <ActivityIndicator size="small" color={statusColor} /> : null}
+            <Text className="text-sm font-medium text-foreground">{statusLabel}</Text>
+          </View>
+          {detail ? (
+            <Text className="text-xs leading-5 text-muted">{detail}</Text>
+          ) : null}
+          {props.liveProvider?.checkedAt && !busy ? (
+            <Text className="text-[11px] text-muted">
+              Checked {relativeTime(props.liveProvider.checkedAt)} ago
+            </Text>
+          ) : null}
+        </View>
+        <SettingsSwitch
+          disabled={!props.isLive || !props.settingsReady || busy}
+          value={props.configuredEnabled}
+          onValueChange={(value) => props.onToggle(value)}
+        />
+      </View>
+    </View>
+  );
+}
+
+export function ProvidersScreen() {
   const theme = useChromeTheme();
   const { getClient } = useEnvironments();
   const { primaryEnvironment, readyEnvironments, selectEnvironment } = usePrimaryEnvironment();
@@ -44,15 +192,29 @@ export function ProvidersScreen() {
   const [isRefreshingProviders, setIsRefreshingProviders] = useState(false);
   const refreshingRef = useRef(false);
 
-  const providers = primaryEnvironment?.serverConfig?.providers ?? [];
+  const liveProviders = primaryEnvironment?.serverConfig?.providers ?? [];
+  const providerRows = useMemo(
+    () =>
+      buildProviderRows({
+        liveProviders,
+        settingsProviderInstances: settings?.providerInstances,
+      }),
+    [liveProviders, settings?.providerInstances]
+  );
 
   const lastCheckedAt = useMemo(() => {
-    if (providers.length === 0) return null;
-    return providers.reduce(
+    if (liveProviders.length === 0) return null;
+    return liveProviders.reduce(
       (latest, provider) => (provider.checkedAt > latest ? provider.checkedAt : latest),
-      providers[0]!.checkedAt
+      liveProviders[0]!.checkedAt
     );
-  }, [providers]);
+  }, [liveProviders]);
+
+  const isConnecting =
+    primaryEnvironment?.connectionState === "connecting" ||
+    primaryEnvironment?.connectionState === "reconnecting";
+  const isPageBusy = isConnecting || isLoading || isRefreshingProviders;
+  const showInitialLoading = isPageBusy && providerRows.length === 0;
 
   const refreshProviders = useCallback(async () => {
     if (!environmentId || refreshingRef.current) return;
@@ -83,9 +245,7 @@ export function ProvidersScreen() {
     async (instanceId: ProviderInstanceId, driver: string, enabled: boolean) => {
       if (!settings) return;
       try {
-        await updateSettings(
-          buildProviderEnabledPatch(settings, instanceId, driver, enabled)
-        );
+        await updateSettings(buildProviderEnabledPatch(settings, instanceId, driver, enabled));
       } catch (updateError) {
         Alert.alert(
           "Could not update provider",
@@ -96,16 +256,28 @@ export function ProvidersScreen() {
     [settings, updateSettings]
   );
 
+  const headerStatus = isRefreshingProviders ? (
+    <View className="flex-row items-center gap-1.5">
+      <ActivityIndicator size="small" color="#f97316" />
+      <Text className="text-[11px] text-muted">Refreshing…</Text>
+    </View>
+  ) : isLoading ? (
+    <View className="flex-row items-center gap-1.5">
+      <ActivityIndicator size="small" color="#f97316" />
+      <Text className="text-[11px] text-muted">Loading…</Text>
+    </View>
+  ) : lastCheckedAt ? (
+    <Text className="text-[11px] text-muted">Checked {relativeTime(lastCheckedAt)} ago</Text>
+  ) : isLive ? (
+    <Text className="text-[11px] text-muted">Waiting for status</Text>
+  ) : null;
+
   const headerAction = (
     <>
-      {lastCheckedAt ? (
-        <HeaderBubble variant="action">
-          <Text className="text-[11px] text-muted">Checked {relativeTime(lastCheckedAt)} ago</Text>
-        </HeaderBubble>
-      ) : null}
+      {headerStatus ? <HeaderBubble variant="action">{headerStatus}</HeaderBubble> : null}
       <HeaderBubble
         accessibilityLabel="Refresh providers"
-        disabled={!isLive || isRefreshingProviders}
+        disabled={!isLive || isRefreshingProviders || isLoading}
         onPress={() => void refreshProviders()}
         variant="icon"
       >
@@ -129,95 +301,86 @@ export function ProvidersScreen() {
           />
         }
       >
-      <SettingsScroll>
-        <EnvironmentPicker
-          environments={readyEnvironments.map((environment) => ({
-            environmentId: environment.connection.environmentId,
-            label: environment.connection.label,
-            connectionState: environment.connectionState,
-          }))}
-          selectedEnvironmentId={environmentId}
-          onSelect={(nextEnvironmentId) =>
-            selectEnvironment(EnvironmentId.make(nextEnvironmentId))
-          }
-        />
-
-        {!isLive ? (
-          <ConnectionBanner
-            title="Live connection required"
-            detail="Connect to a server over WebSocket to view provider status and toggle providers on or off."
+        <SettingsScroll>
+          <EnvironmentPicker
+            environments={readyEnvironments.map((environment) => ({
+              environmentId: environment.connection.environmentId,
+              label: environment.connection.label,
+              connectionState: environment.connectionState,
+            }))}
+            selectedEnvironmentId={environmentId}
+            onSelect={(nextEnvironmentId) =>
+              selectEnvironment(EnvironmentId.make(nextEnvironmentId))
+            }
           />
-        ) : null}
 
-        {error ? <ConnectionBanner title="Provider settings unavailable" detail={error} /> : null}
+          {isLive ? (
+            <ProvidersStatusStrip
+              isConnecting={isConnecting}
+              isLoadingSettings={isLoading}
+              isRefreshingProviders={isRefreshingProviders}
+              lastCheckedAt={lastCheckedAt}
+              providerCount={providerRows.length}
+            />
+          ) : null}
 
-        <SettingsSection title="Providers">
-          {isLoading && providers.length === 0 ? (
-            <SettingsLoadingRow label="Loading providers..." />
-          ) : providers.length === 0 ? (
-            <View className="px-4 py-5">
-              <Text className="text-sm leading-5 text-muted">
-                No providers reported yet. Refresh after the server finishes its startup checks.
-              </Text>
-            </View>
-          ) : (
-            providers.map((provider, index) => {
-              const summary = getProviderSummary(provider);
-              const version = getProviderVersionLabel(provider.version);
-              const displayName =
-                provider.displayName ??
-                PROVIDER_DISPLAY_NAMES[provider.driver] ??
-                provider.driver;
-              const detail = [summary.headline, summary.detail].filter(Boolean).join(" – ");
-              const configuredEnabled =
-                settings?.providerInstances?.[provider.instanceId]?.enabled ??
-                settings?.providers[provider.driver as keyof NonNullable<typeof settings>["providers"]]
-                  ?.enabled ??
-                provider.enabled;
+          {!isLive ? (
+            <ConnectionBanner
+              title="Live connection required"
+              detail="Connect to a server over WebSocket to view provider status and toggle providers on or off."
+            />
+          ) : null}
 
-              return (
-                <View key={provider.instanceId}>
-                  {index > 0 ? <SettingsDivider /> : null}
-                  <View className="gap-3 px-4 py-4">
-                    <View className="flex-row items-start gap-3">
-                      <ProviderIcon
-                        driver={provider.driver}
-                        label={displayName}
-                        size={28}
-                      />
-                      <View className="flex-1 gap-1">
-                        <View className="flex-row flex-wrap items-center gap-2">
-                          <Text className="text-sm font-semibold text-foreground">
-                            {displayName}
-                          </Text>
-                          {version ? (
-                            <Text className="text-xs text-muted">{version}</Text>
-                          ) : null}
-                          {provider.badgeLabel ? (
-                            <View className="rounded-full bg-warning-soft px-2 py-0.5">
-                              <Text className="text-[10px] font-bold uppercase tracking-wide text-warning">
-                                {provider.badgeLabel}
-                              </Text>
-                            </View>
-                          ) : null}
-                        </View>
-                        <Text className="text-sm leading-5 text-muted">{detail}</Text>
-                      </View>
-                      <SettingsSwitch
-                        disabled={!isLive || !settings}
-                        value={configuredEnabled}
-                        onValueChange={(value) =>
-                          void toggleProvider(provider.instanceId, provider.driver, value)
-                        }
-                      />
-                    </View>
+          {error ? <ConnectionBanner title="Provider settings unavailable" detail={error} /> : null}
+
+          <SettingsSection title="Providers">
+            {showInitialLoading ? (
+              <SettingsLoadingRow
+                label={
+                  isRefreshingProviders
+                    ? "Refreshing provider status..."
+                    : isConnecting
+                      ? "Connecting to server..."
+                      : "Loading providers..."
+                }
+              />
+            ) : providerRows.length === 0 ? (
+              <View className="gap-3 px-4 py-5">
+                <Text className="text-sm leading-5 text-muted">
+                  No providers reported yet. Refresh after the server finishes its startup checks.
+                </Text>
+                {isLive ? (
+                  <Text className="text-xs text-muted">
+                    If this server should have providers configured, tap refresh in the header.
+                  </Text>
+                ) : null}
+              </View>
+            ) : (
+              providerRows.map((row, index) => {
+                const configuredEnabled = resolveConfiguredProviderEnabled(row, settings);
+
+                return (
+                  <View key={row.instanceId}>
+                    {index > 0 ? <SettingsDivider /> : null}
+                    <ProviderRow
+                      configuredEnabled={configuredEnabled}
+                      displayName={row.displayName}
+                      driver={row.driver}
+                      isLoadingSettings={isLoading}
+                      isLive={isLive}
+                      isRefreshingProviders={isRefreshingProviders}
+                      liveProvider={row.liveProvider}
+                      settingsReady={Boolean(settings)}
+                      onToggle={(enabled) =>
+                        void toggleProvider(row.instanceId, row.driver, enabled)
+                      }
+                    />
                   </View>
-                </View>
-              );
-            })
-          )}
-        </SettingsSection>
-      </SettingsScroll>
+                );
+              })
+            )}
+          </SettingsSection>
+        </SettingsScroll>
       </BlurScreenRoot>
     </Screen>
   );

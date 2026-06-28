@@ -107,7 +107,7 @@ export function SettingsSection(props: {
 }
 
 export function SettingsDivider() {
-  return <View className="mx-4 h-px bg-separator" />;
+  return <View className="h-px bg-separator" />;
 }
 
 export function SettingsNavRow(props: {
