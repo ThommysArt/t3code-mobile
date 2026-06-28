@@ -29,7 +29,6 @@ import {
   messageImageUrl,
   type SelectedImageAttachment,
 } from "./messageAttachments";
-import { pasteImageAttachment } from "./imageAttachmentClipboard";
 import { pickImageAttachments } from "./imageAttachmentPicker";
 import { MarkdownContent } from "./MarkdownContent";
 import { ModelSelectorDrawer, ThinkingOptionsDrawer } from "./ComposerSelectors";
@@ -526,16 +525,6 @@ export function ThreadScreen() {
     }
   }, [selectedAttachments.length]);
 
-  const pasteImage = useCallback(async () => {
-    setAttachmentError(null);
-    const result = await pasteImageAttachment({ existingCount: selectedAttachments.length });
-    if (result.kind === "selected") {
-      setSelectedAttachments((current) => [...current, result.attachment]);
-      return;
-    }
-    setAttachmentError(result.message);
-  }, [selectedAttachments.length]);
-
   const removeAttachment = useCallback((key: string) => {
     setSelectedAttachments((current) => current.filter((attachment) => attachment.key !== key));
     setAttachmentError(null);
@@ -786,14 +775,6 @@ export function ThreadScreen() {
                 className="mr-2 h-9 w-9 items-center justify-center rounded-full bg-default"
               >
                 <AppIcon name="image" size={18} color={isDark ? "#d4d4d4" : "#525252"} />
-              </Pressable>
-              <Pressable
-                accessibilityLabel="Paste image"
-                accessibilityRole="button"
-                onPress={() => void pasteImage()}
-                className="mr-2 h-9 w-9 items-center justify-center rounded-full bg-default"
-              >
-                <AppIcon name="clipboard" size={18} color={isDark ? "#d4d4d4" : "#525252"} />
               </Pressable>
               <Pressable
                 accessibilityLabel="Select model"

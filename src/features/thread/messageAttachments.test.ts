@@ -48,24 +48,24 @@ describe("message attachments", () => {
     ]);
   });
 
-  it("builds selected image attachments from clipboard data URLs", () => {
+  it("builds selected image attachments from image data URLs", () => {
     const result = buildSelectedImageAttachment({
-      key: "clipboard-image",
-      name: "paste.png",
+      key: "data-url-image",
+      name: "image.png",
       dataUrl: "data:image/png;base64,aGVsbG8=",
     });
 
     expect(result).toEqual({
       kind: "selected",
       attachment: {
-        key: "clipboard-image",
-        name: "paste.png",
+        key: "data-url-image",
+        name: "image.png",
         mimeType: "image/png",
         sizeBytes: 5,
         previewUri: "data:image/png;base64,aGVsbG8=",
         upload: {
           type: "image",
-          name: "paste.png",
+          name: "image.png",
           mimeType: "image/png",
           sizeBytes: 5,
           dataUrl: "data:image/png;base64,aGVsbG8=",

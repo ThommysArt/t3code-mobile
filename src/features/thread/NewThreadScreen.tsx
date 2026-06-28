@@ -45,7 +45,6 @@ import {
   thinkingOptionDescriptors,
   type ModelOption,
 } from "./modelOptions";
-import { pasteImageAttachment } from "./imageAttachmentClipboard";
 import { pickImageAttachments } from "./imageAttachmentPicker";
 import type { SelectedImageAttachment } from "./messageAttachments";
 
@@ -276,16 +275,6 @@ export function NewThreadScreen() {
     }
   }, [selectedAttachments.length]);
 
-  const pasteImage = useCallback(async () => {
-    setAttachmentError(null);
-    const result = await pasteImageAttachment({ existingCount: selectedAttachments.length });
-    if (result.kind === "selected") {
-      setSelectedAttachments((current) => [...current, result.attachment]);
-      return;
-    }
-    setAttachmentError(result.message);
-  }, [selectedAttachments.length]);
-
   const removeAttachment = useCallback((key: string) => {
     setSelectedAttachments((current) => current.filter((attachment) => attachment.key !== key));
     setAttachmentError(null);
@@ -461,56 +450,50 @@ export function NewThreadScreen() {
               );
             })}
           </View>
-          <View className="flex-row items-center gap-2">
+          <View className="flex-row items-center gap-1.5">
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Attach images"
               onPress={() => void addImages()}
-              className="h-12 w-12 items-center justify-center rounded-full bg-default"
+              className="h-10 w-10 items-center justify-center rounded-full bg-default"
             >
-              <AppIcon name="image" size={20} color={isDark ? "#d4d4d4" : "#525252"} />
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Paste image"
-              onPress={() => void pasteImage()}
-              className="h-12 w-12 items-center justify-center rounded-full bg-default"
-            >
-              <AppIcon name="clipboard" size={20} color={isDark ? "#d4d4d4" : "#525252"} />
+              <AppIcon name="image" size={18} color={isDark ? "#d4d4d4" : "#525252"} />
             </Pressable>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Select branch"
               onPress={() => setBranchDrawerOpen(true)}
-              className="max-w-[34%] flex-row items-center gap-2 rounded-full bg-default px-3 py-3"
+              className="min-w-0 flex-[1.05] flex-row items-center gap-1.5 rounded-full bg-default px-2.5 py-2.5"
             >
-              <AppIcon name="branch" size={16} color={isDark ? "#d4d4d4" : "#525252"} />
+              <AppIcon name="branch" size={15} color={isDark ? "#d4d4d4" : "#525252"} />
               <Text
-                className="min-w-0 flex-1 text-sm font-semibold text-foreground"
+                className="min-w-0 flex-1 text-xs font-semibold text-foreground"
                 numberOfLines={1}
               >
                 {selectedBranch || "Branch"}
               </Text>
             </Pressable>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Select model"
               onPress={() => setModelDrawerOpen(true)}
-              className="min-w-0 flex-1 flex-row items-center gap-2 rounded-full bg-default px-4 py-3"
+              className="h-10 min-w-10 flex-[0.72] flex-row items-center justify-center gap-1 rounded-full bg-default px-2"
             >
               <ProviderIcon
                 driver={selectedOption?.providerDriver ?? selectedModel?.instanceId ?? ""}
                 label={selectedOption?.providerLabel ?? selectedModel?.model ?? "AI"}
-                size={19}
+                size={18}
               />
-              <Text className="text-sm font-semibold text-foreground" numberOfLines={1}>
-                {selectedOption?.label ?? selectedModel?.model ?? "Select model"}
+              <Text className="min-w-0 flex-1 text-xs font-semibold text-foreground" numberOfLines={1}>
+                {selectedModel?.model ?? "Model"}
               </Text>
             </Pressable>
             {thinkingDescriptors.length > 0 ? (
               <Pressable
                 onPress={() => setThinkingDrawerOpen(true)}
-                className="max-w-[32%] rounded-full bg-default px-4 py-3"
+                className="h-10 min-w-0 flex-[0.82] justify-center rounded-full bg-default px-2.5"
               >
-                <Text className="text-sm font-semibold text-muted" numberOfLines={1}>
+                <Text className="text-center text-xs font-semibold text-muted" numberOfLines={1}>
                   {typeof thinkingValue === "string"
                     ? thinkingValue
                     : typeof thinkingValue === "boolean"
@@ -524,7 +507,7 @@ export function NewThreadScreen() {
             <Pressable
               disabled={!canSubmit}
               onPress={() => void submit()}
-              className={`h-12 w-12 items-center justify-center rounded-full ${
+              className={`h-10 w-10 items-center justify-center rounded-full ${
                 canSubmit ? "bg-accent" : "bg-default"
               }`}
             >
@@ -533,7 +516,7 @@ export function NewThreadScreen() {
               ) : (
                 <AppIcon
                   name="arrow-up"
-                  size={21}
+                  size={18}
                   color={canSubmit ? "#ffffff" : isDark ? "#737373" : "#a3a3a3"}
                 />
               )}

@@ -6,7 +6,6 @@ export type AppIconName =
   | "branch"
   | "chevron-down"
   | "chevron-right"
-  | "clipboard"
   | "compose"
   | "copy"
   | "file"
@@ -83,12 +82,6 @@ export function AppIcon(props: {
         <>
           <Rect x="8" y="8" width="11" height="11" rx="2" {...common} />
           <Path d="M5 15H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1" {...common} />
-        </>
-      ) : props.name === "clipboard" ? (
-        <>
-          <Path d="M9 4h6a2 2 0 0 1 2 2v1H7V6a2 2 0 0 1 2-2Z" {...common} />
-          <Path d="M8 6H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-2" {...common} />
-          <Path d="m8 15 2.5-2.5 2 2 1.5-1.5 2 2" {...common} />
         </>
       ) : props.name === "back" ? (
         <>

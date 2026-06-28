@@ -58,7 +58,7 @@ export function buildSelectedImageAttachment(input: {
   | { readonly kind: "selected"; readonly attachment: SelectedImageAttachment } {
   const parsed = parseImageDataUrl(input.dataUrl);
   if (!parsed) {
-    return { kind: "error", message: "Clipboard image data is not in a supported format." };
+    return { kind: "error", message: "Image data is not in a supported format." };
   }
 
   const sizeBytes = input.sizeBytes ?? parsed.sizeBytes;
