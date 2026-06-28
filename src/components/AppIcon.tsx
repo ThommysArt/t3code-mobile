@@ -6,18 +6,21 @@ export type AppIconName =
   | "branch"
   | "chevron-down"
   | "chevron-right"
+  | "clipboard"
   | "compose"
   | "copy"
   | "file"
   | "folder"
   | "git"
+  | "image"
   | "plus"
   | "refresh"
   | "search"
   | "settings"
   | "stop"
   | "terminal"
-  | "wifi";
+  | "wifi"
+  | "x";
 
 export function AppIcon(props: {
   readonly name: AppIconName;
@@ -53,6 +56,12 @@ export function AppIcon(props: {
           <Path d="M6 3h8l4 4v14H6Z" {...common} />
           <Polyline points="14 3 14 8 19 8" {...common} />
         </>
+      ) : props.name === "image" ? (
+        <>
+          <Rect x="3" y="5" width="18" height="14" rx="3" {...common} />
+          <Circle cx="8" cy="10" r="1.5" {...common} />
+          <Path d="m5.5 17 4.5-4.5 3 3 2-2 3.5 3.5" {...common} />
+        </>
       ) : props.name === "branch" || props.name === "git" ? (
         <>
           <Circle cx="6" cy="5" r="2" {...common} />
@@ -74,6 +83,12 @@ export function AppIcon(props: {
         <>
           <Rect x="8" y="8" width="11" height="11" rx="2" {...common} />
           <Path d="M5 15H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1" {...common} />
+        </>
+      ) : props.name === "clipboard" ? (
+        <>
+          <Path d="M9 4h6a2 2 0 0 1 2 2v1H7V6a2 2 0 0 1 2-2Z" {...common} />
+          <Path d="M8 6H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-2" {...common} />
+          <Path d="m8 15 2.5-2.5 2 2 1.5-1.5 2 2" {...common} />
         </>
       ) : props.name === "back" ? (
         <>
@@ -112,6 +127,11 @@ export function AppIcon(props: {
             {...common}
           />
           <Circle cx="12" cy="19" r="1" fill={color} />
+        </>
+      ) : props.name === "x" ? (
+        <>
+          <Line x1="6" y1="6" x2="18" y2="18" {...common} />
+          <Line x1="18" y1="6" x2="6" y2="18" {...common} />
         </>
       ) : props.name === "chevron-right" ? (
         <Polyline points="9 6 15 12 9 18" {...common} />

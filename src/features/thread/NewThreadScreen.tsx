@@ -1,12 +1,11 @@
 import {
   CommandId,
-  DEFAULT_PROVIDER_INTERACTION_MODE,
-  DEFAULT_RUNTIME_MODE,
   MessageId,
   ThreadId,
   type VcsRef,
   type ModelSelection,
 } from "@t3tools/contracts";
+import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -14,6 +13,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   Text,
   TextInput,
   useColorScheme,
@@ -25,6 +25,7 @@ import { AppIcon } from "@/components/AppIcon";
 import { ProviderIcon } from "@/components/ProviderIcon";
 import { Screen } from "@/components/Screen";
 import { useEnvironments } from "@/runtime/EnvironmentProvider";
+import { usePreferences } from "@/runtime/PreferencesProvider";
 import { useServerSettings } from "@/runtime/useServerSettings";
 import { newId } from "@/utils/id";
 import { randomHex } from "@/utils/randomHex";
@@ -34,10 +35,7 @@ import {
   ThinkingOptionsDrawer,
   type BranchOption,
 } from "./ComposerSelectors";
-import {
-  buildNewThreadTurnStartCommand,
-  validateNewThreadSubmit,
-} from "./newThreadCommand";
+import { buildNewThreadTurnStartCommand, validateNewThreadSubmit } from "./newThreadCommand";
 import {
   buildModelOptions,
   getDescriptorDefaultValue,
@@ -47,6 +45,9 @@ import {
   thinkingOptionDescriptors,
   type ModelOption,
 } from "./modelOptions";
+import { pasteImageAttachment } from "./imageAttachmentClipboard";
+import { pickImageAttachments } from "./imageAttachmentPicker";
+import type { SelectedImageAttachment } from "./messageAttachments";
 
 function firstParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? (value[0] ?? "") : (value ?? "");
@@ -94,6 +95,40 @@ function toBranchOptions(refs: readonly VcsRef[], selectedBranch: string): reado
   return options;
 }
 
+function ComposerImageAttachment({
+  attachment,
+  onRemove,
+}: {
+  readonly attachment: SelectedImageAttachment;
+  readonly onRemove: () => void;
+}) {
+  const isDark = useColorScheme() === "dark";
+
+  return (
+    <View className="relative h-16 w-16 overflow-hidden rounded-2xl bg-surface-secondary">
+      <Image
+        accessibilityLabel={attachment.name}
+        source={{ uri: attachment.previewUri }}
+        contentFit="cover"
+        style={{ height: "100%", width: "100%" }}
+      />
+      <Pressable
+        accessibilityLabel={`Remove ${attachment.name}`}
+        accessibilityRole="button"
+        onPress={onRemove}
+        className="absolute right-1 top-1 h-6 w-6 items-center justify-center rounded-full bg-black/70"
+      >
+        <AppIcon name="x" size={14} color="#ffffff" strokeWidth={2.5} />
+      </Pressable>
+      <View
+        pointerEvents="none"
+        className="absolute inset-0 rounded-2xl border"
+        style={{ borderColor: isDark ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.08)" }}
+      />
+    </View>
+  );
+}
+
 export function NewThreadScreen() {
   const params = useLocalSearchParams<{
     environmentId?: string | string[];
@@ -110,15 +145,27 @@ export function NewThreadScreen() {
       (candidate) => candidate.environmentId === environmentId && candidate.id === projectId
     ) ?? null;
   const environment = project ? getEnvironment(project.environmentId) : null;
+  const { preferences } = usePreferences();
+  const defaultThreadModelSelection = preferences.defaultThreadModelSelection;
   const { settings } = useServerSettings(project?.environmentId);
   const modelOptions = useMemo(
-    () => buildModelOptions(environment?.serverConfig, project?.defaultModelSelection ?? null),
-    [environment?.serverConfig, project?.defaultModelSelection]
+    () =>
+      buildModelOptions(
+        environment?.serverConfig,
+        defaultThreadModelSelection ?? project?.defaultModelSelection ?? null
+      ),
+    [defaultThreadModelSelection, environment?.serverConfig, project?.defaultModelSelection]
   );
+  const initialModelSelection =
+    defaultThreadModelSelection ??
+    project?.defaultModelSelection ??
+    modelOptions[0]?.selection ??
+    null;
   const [prompt, setPrompt] = useState("");
-  const [selectedModel, setSelectedModel] = useState<ModelSelection | null>(
-    project?.defaultModelSelection ?? modelOptions[0]?.selection ?? null
-  );
+  const [selectedAttachments, setSelectedAttachments] = useState<
+    readonly SelectedImageAttachment[]
+  >([]);
+  const [selectedModel, setSelectedModel] = useState<ModelSelection | null>(initialModelSelection);
   const [modelDrawerOpen, setModelDrawerOpen] = useState(false);
   const [thinkingDrawerOpen, setThinkingDrawerOpen] = useState(false);
   const [branchDrawerOpen, setBranchDrawerOpen] = useState(false);
@@ -129,8 +176,10 @@ export function NewThreadScreen() {
   const [branchError, setBranchError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const branchEditedRef = useRef(false);
   const modeEditedRef = useRef(false);
+  const modelEditedRef = useRef(false);
   const selectedOption =
     modelOptions.find(
       (option) =>
@@ -139,17 +188,19 @@ export function NewThreadScreen() {
         option.selection.model === selectedModel.model
     ) ?? null;
   const thinkingDescriptors = thinkingOptionDescriptors(selectedOption);
-  const canSubmit = Boolean(project && selectedModel && prompt.trim() && !submitting);
+  const canSubmit = Boolean(
+    project && selectedModel && (prompt.trim() || selectedAttachments.length > 0) && !submitting
+  );
   const branchOptions = useMemo(
     () => toBranchOptions(branchRefs, selectedBranch),
     [branchRefs, selectedBranch]
   );
 
   useEffect(() => {
-    if (!selectedModel) {
-      setSelectedModel(project?.defaultModelSelection ?? modelOptions[0]?.selection ?? null);
+    if (!modelEditedRef.current || !selectedModel) {
+      setSelectedModel(initialModelSelection);
     }
-  }, [modelOptions, project?.defaultModelSelection, selectedModel]);
+  }, [initialModelSelection, selectedModel]);
 
   useEffect(() => {
     if (!settings?.defaultThreadEnvMode || modeEditedRef.current) return;
@@ -195,11 +246,13 @@ export function NewThreadScreen() {
   }, [environment?.sessionRevision, getClient, project]);
 
   const selectModel = useCallback((option: ModelOption) => {
+    modelEditedRef.current = true;
     setSelectedModel(option.selection);
     setModelDrawerOpen(false);
   }, []);
 
   const selectThinkingOption = useCallback((id: string, value: string | boolean) => {
+    modelEditedRef.current = true;
     setSelectedModel((current) =>
       current ? setModelSelectionOption(current, id, value) : current
     );
@@ -211,8 +264,42 @@ export function NewThreadScreen() {
     setBranchDrawerOpen(false);
   }, []);
 
+  const addImages = useCallback(async () => {
+    setAttachmentError(null);
+    const result = await pickImageAttachments({ existingCount: selectedAttachments.length });
+    if (result.kind === "selected") {
+      setSelectedAttachments((current) => [...current, ...result.attachments]);
+      return;
+    }
+    if (result.kind === "error" || result.kind === "denied") {
+      setAttachmentError(result.message);
+    }
+  }, [selectedAttachments.length]);
+
+  const pasteImage = useCallback(async () => {
+    setAttachmentError(null);
+    const result = await pasteImageAttachment({ existingCount: selectedAttachments.length });
+    if (result.kind === "selected") {
+      setSelectedAttachments((current) => [...current, result.attachment]);
+      return;
+    }
+    setAttachmentError(result.message);
+  }, [selectedAttachments.length]);
+
+  const removeAttachment = useCallback((key: string) => {
+    setSelectedAttachments((current) => current.filter((attachment) => attachment.key !== key));
+    setAttachmentError(null);
+  }, []);
+
   const submit = useCallback(async () => {
-    if (!project || !selectedModel || !prompt.trim() || submitting) return;
+    if (
+      !project ||
+      !selectedModel ||
+      (!prompt.trim() && selectedAttachments.length === 0) ||
+      submitting
+    ) {
+      return;
+    }
     const branch = selectedBranch.trim() || null;
     const validationError = validateNewThreadSubmit({
       envMode: threadEnvMode,
@@ -224,6 +311,7 @@ export function NewThreadScreen() {
     }
     setSubmitting(true);
     setError(null);
+    setAttachmentError(null);
     const threadId = ThreadId.make(newId());
     const createdAt = new Date().toISOString();
     const title = titleFromPrompt(prompt);
@@ -239,6 +327,7 @@ export function NewThreadScreen() {
           projectCwd: project.workspaceRoot,
           title,
           prompt,
+          attachments: selectedAttachments.map((attachment) => attachment.upload),
           modelSelection,
           branch,
           envMode: threadEnvMode,
@@ -260,6 +349,7 @@ export function NewThreadScreen() {
     prompt,
     router,
     selectedBranch,
+    selectedAttachments,
     selectedModel,
     submitting,
     threadEnvMode,
@@ -322,10 +412,26 @@ export function NewThreadScreen() {
           className="border-t border-separator bg-background px-3 pt-3"
           style={{ paddingBottom: Math.max(insets.bottom, 8) }}
         >
-          {error ? (
+          {error || attachmentError ? (
             <View className="mb-2 rounded-xl bg-danger-soft px-3 py-2">
-              <Text className="text-xs leading-5 text-danger">{error}</Text>
+              <Text className="text-xs leading-5 text-danger">{error ?? attachmentError}</Text>
             </View>
+          ) : null}
+          {selectedAttachments.length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              className="mb-2"
+              contentContainerStyle={{ gap: 8 }}
+            >
+              {selectedAttachments.map((attachment) => (
+                <ComposerImageAttachment
+                  key={attachment.key}
+                  attachment={attachment}
+                  onRemove={() => removeAttachment(attachment.key)}
+                />
+              ))}
+            </ScrollView>
           ) : null}
           <View className="mb-2 flex-row items-center gap-2">
             {(["local", "worktree"] as const).map((mode) => {
@@ -356,6 +462,22 @@ export function NewThreadScreen() {
             })}
           </View>
           <View className="flex-row items-center gap-2">
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Attach images"
+              onPress={() => void addImages()}
+              className="h-12 w-12 items-center justify-center rounded-full bg-default"
+            >
+              <AppIcon name="image" size={20} color={isDark ? "#d4d4d4" : "#525252"} />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Paste image"
+              onPress={() => void pasteImage()}
+              className="h-12 w-12 items-center justify-center rounded-full bg-default"
+            >
+              <AppIcon name="clipboard" size={20} color={isDark ? "#d4d4d4" : "#525252"} />
+            </Pressable>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Select branch"

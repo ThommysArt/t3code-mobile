@@ -7,6 +7,7 @@ import {
   type ProjectId,
   type ThreadId,
   type ThreadTurnStartBootstrap,
+  type UploadChatAttachment,
 } from "@t3tools/contracts";
 import { buildTemporaryWorktreeBranchName } from "@t3tools/shared/git";
 
@@ -69,6 +70,7 @@ export function buildNewThreadTurnStartCommand(input: {
   readonly projectCwd: string;
   readonly title: string;
   readonly prompt: string;
+  readonly attachments?: readonly UploadChatAttachment[];
   readonly modelSelection: ModelSelection;
   readonly branch: string | null;
   readonly envMode: NewThreadEnvMode;
@@ -83,7 +85,7 @@ export function buildNewThreadTurnStartCommand(input: {
       messageId: input.messageId,
       role: "user" as const,
       text: input.prompt.trim(),
-      attachments: [] as const,
+      attachments: input.attachments ?? [],
     },
     modelSelection: input.modelSelection,
     titleSeed: input.title,

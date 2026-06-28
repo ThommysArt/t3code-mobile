@@ -24,7 +24,13 @@ import { Screen } from "@/components/Screen";
 import { loadThreadDraft, saveThreadDraft } from "@/runtime/db";
 import { useThread } from "@/runtime/useThread";
 import { relativeTime } from "@/utils/time";
-import { attachmentHeaders, messageImageUrl } from "./messageAttachments";
+import {
+  attachmentHeaders,
+  messageImageUrl,
+  type SelectedImageAttachment,
+} from "./messageAttachments";
+import { pasteImageAttachment } from "./imageAttachmentClipboard";
+import { pickImageAttachments } from "./imageAttachmentPicker";
 import { MarkdownContent } from "./MarkdownContent";
 import { ModelSelectorDrawer, ThinkingOptionsDrawer } from "./ComposerSelectors";
 import { COLLAPSED_PROMPT_HEIGHT, shouldCollapsePrompt } from "./messageDisplay";
@@ -94,6 +100,40 @@ function MessageAttachment({
   );
 }
 
+function ComposerImageAttachment({
+  attachment,
+  onRemove,
+}: {
+  readonly attachment: SelectedImageAttachment;
+  readonly onRemove: () => void;
+}) {
+  const isDark = useColorScheme() === "dark";
+
+  return (
+    <View className="relative h-16 w-16 overflow-hidden rounded-2xl bg-surface-secondary">
+      <Image
+        accessibilityLabel={attachment.name}
+        source={{ uri: attachment.previewUri }}
+        contentFit="cover"
+        style={{ height: "100%", width: "100%" }}
+      />
+      <Pressable
+        accessibilityLabel={`Remove ${attachment.name}`}
+        accessibilityRole="button"
+        onPress={onRemove}
+        className="absolute right-1 top-1 h-6 w-6 items-center justify-center rounded-full bg-black/70"
+      >
+        <AppIcon name="x" size={14} color="#ffffff" strokeWidth={2.5} />
+      </Pressable>
+      <View
+        pointerEvents="none"
+        className="absolute inset-0 rounded-2xl border"
+        style={{ borderColor: isDark ? "rgba(255,255,255,0.16)" : "rgba(0,0,0,0.08)" }}
+      />
+    </View>
+  );
+}
+
 function MessageRow({
   bearerToken,
   httpBaseUrl,
@@ -101,15 +141,22 @@ function MessageRow({
 }: {
   readonly bearerToken: string | null;
   readonly httpBaseUrl: string | null;
-  readonly message: OrchestrationMessage & { optimistic?: true };
+  readonly message: OrchestrationMessage & {
+    readonly optimistic?: true;
+    readonly localImageAttachments?: readonly { readonly name: string; readonly uri: string }[];
+  };
 }) {
   const isUser = message.role === "user";
   const isDark = useColorScheme() === "dark";
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   const attachments = message.attachments ?? [];
+  const localImageAttachments =
+    "localImageAttachments" in message ? (message.localImageAttachments ?? []) : [];
   const collapsible = isUser && shouldCollapsePrompt(message.text);
-  if (!message.text.trim() && attachments.length === 0) return null;
+  if (!message.text.trim() && attachments.length === 0 && localImageAttachments.length === 0) {
+    return null;
+  }
   const headers = attachmentHeaders(bearerToken);
   const copyMessage = () => {
     const text = message.text.trim();
@@ -127,6 +174,14 @@ function MessageRow({
           isUser ? "w-[80%] rounded-[24px] rounded-br-md bg-default px-4 py-3" : "w-full px-1 py-1"
         }
       >
+        {localImageAttachments.map((attachment) => (
+          <MessageAttachment
+            key={attachment.uri}
+            headers={undefined}
+            name={attachment.name}
+            uri={attachment.uri}
+          />
+        ))}
         {attachments.map((attachment) => {
           const uri = messageImageUrl(httpBaseUrl, attachment.id);
           if (!uri) return null;
@@ -349,6 +404,10 @@ export function ThreadScreen() {
     updateModelSelection,
   } = useThread(environmentId, threadId);
   const [draft, setDraft] = useState("");
+  const [selectedAttachments, setSelectedAttachments] = useState<readonly SelectedImageAttachment[]>(
+    []
+  );
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const draftRef = useRef("");
   const draftEditedRef = useRef(false);
   const draftHydratedRef = useRef(false);
@@ -365,7 +424,7 @@ export function ThreadScreen() {
   );
   const busy = thread?.session?.status === "running" || thread?.session?.status === "starting";
   const live = connectionState === "ready";
-  const canSend = Boolean(thread && draft.trim());
+  const canSend = Boolean(thread && (draft.trim() || selectedAttachments.length > 0));
   const statusLabel = live ? "Live" : dataSource === "http" ? "HTTP sync" : "Offline";
   const statusColor = live ? "#22c55e" : dataSource === "http" ? "#f59e0b" : "#737373";
   const effectiveModel = selectedModel ?? thread?.modelSelection ?? shell?.modelSelection ?? null;
@@ -427,6 +486,8 @@ export function ThreadScreen() {
     draftEditedRef.current = false;
     draftRef.current = "";
     setDraft("");
+    setSelectedAttachments([]);
+    setAttachmentError(null);
 
     void loadThreadDraft(environmentId, threadId).then((savedDraft) => {
       if (!active) return;
@@ -453,15 +514,58 @@ export function ThreadScreen() {
     return () => clearTimeout(timeout);
   }, [draft, environmentId, threadId]);
 
+  const addImages = useCallback(async () => {
+    setAttachmentError(null);
+    const result = await pickImageAttachments({ existingCount: selectedAttachments.length });
+    if (result.kind === "selected") {
+      setSelectedAttachments((current) => [...current, ...result.attachments]);
+      return;
+    }
+    if (result.kind === "error" || result.kind === "denied") {
+      setAttachmentError(result.message);
+    }
+  }, [selectedAttachments.length]);
+
+  const pasteImage = useCallback(async () => {
+    setAttachmentError(null);
+    const result = await pasteImageAttachment({ existingCount: selectedAttachments.length });
+    if (result.kind === "selected") {
+      setSelectedAttachments((current) => [...current, result.attachment]);
+      return;
+    }
+    setAttachmentError(result.message);
+  }, [selectedAttachments.length]);
+
+  const removeAttachment = useCallback((key: string) => {
+    setSelectedAttachments((current) => current.filter((attachment) => attachment.key !== key));
+    setAttachmentError(null);
+  }, []);
+
   const submit = useCallback(async () => {
     const text = draft.trim();
-    if (!text || !effectiveModel) return;
+    if ((!text && selectedAttachments.length === 0) || !effectiveModel) return;
+    const attachments = selectedAttachments;
     draftRef.current = "";
     setDraft("");
+    setSelectedAttachments([]);
+    setAttachmentError(null);
     void saveThreadDraft(environmentId, threadId, "");
     clearSendError();
-    await sendMessage(text, effectiveModel);
-  }, [clearSendError, draft, effectiveModel, environmentId, sendMessage, threadId]);
+    await sendMessage(
+      text,
+      effectiveModel,
+      attachments.map((attachment) => attachment.upload),
+      attachments.map((attachment) => ({ name: attachment.name, uri: attachment.previewUri }))
+    );
+  }, [
+    clearSendError,
+    draft,
+    effectiveModel,
+    environmentId,
+    selectedAttachments,
+    sendMessage,
+    threadId,
+  ]);
 
   const selectModel = useCallback(
     (option: ModelOption) => {
@@ -637,12 +741,30 @@ export function ThreadScreen() {
           className="border-t border-separator bg-background px-3 pt-3"
           style={{ paddingBottom: Math.max(insets.bottom, 8) }}
         >
-          {sendError || modelError ? (
+          {sendError || modelError || attachmentError ? (
             <View className="mb-2 rounded-xl bg-danger-soft px-3 py-2">
-              <Text className="text-xs leading-5 text-danger">{sendError ?? modelError}</Text>
+              <Text className="text-xs leading-5 text-danger">
+                {sendError ?? modelError ?? attachmentError}
+              </Text>
             </View>
           ) : null}
           <View className="min-h-32 rounded-[28px] border border-border bg-surface px-4 pb-3 pt-3">
+            {selectedAttachments.length > 0 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                className="mb-3"
+                contentContainerStyle={{ gap: 8 }}
+              >
+                {selectedAttachments.map((attachment) => (
+                  <ComposerImageAttachment
+                    key={attachment.key}
+                    attachment={attachment}
+                    onRemove={() => removeAttachment(attachment.key)}
+                  />
+                ))}
+              </ScrollView>
+            ) : null}
             <TextInput
               value={draft}
               onChangeText={(value) => {
@@ -657,6 +779,22 @@ export function ThreadScreen() {
               textAlignVertical="top"
             />
             <View className="mt-2 flex-row items-center">
+              <Pressable
+                accessibilityLabel="Attach images"
+                accessibilityRole="button"
+                onPress={() => void addImages()}
+                className="mr-2 h-9 w-9 items-center justify-center rounded-full bg-default"
+              >
+                <AppIcon name="image" size={18} color={isDark ? "#d4d4d4" : "#525252"} />
+              </Pressable>
+              <Pressable
+                accessibilityLabel="Paste image"
+                accessibilityRole="button"
+                onPress={() => void pasteImage()}
+                className="mr-2 h-9 w-9 items-center justify-center rounded-full bg-default"
+              >
+                <AppIcon name="clipboard" size={18} color={isDark ? "#d4d4d4" : "#525252"} />
+              </Pressable>
               <Pressable
                 accessibilityLabel="Select model"
                 accessibilityRole="button"

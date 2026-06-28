@@ -45,6 +45,13 @@ const config: ExpoConfig = {
       },
     ],
     [
+      "expo-image-picker",
+      {
+        photosPermission:
+          "Allow T3 Code Mobile to access your photos so you can attach images to prompts.",
+      },
+    ],
+    [
       "expo-splash-screen",
       {
         image: "./assets/splash-icon.png",

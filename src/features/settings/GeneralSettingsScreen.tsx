@@ -1,5 +1,4 @@
 import type {
-  ModelSelection,
   ProviderOptionSelectionValue,
   SidebarThreadPreviewCount,
   TimestampFormat,
@@ -28,10 +27,7 @@ import {
   thinkingOptionDescriptors,
   type ModelOption,
 } from "@/features/thread/modelOptions";
-import {
-  ModelSelectorDrawer,
-  ThinkingOptionsDrawer,
-} from "@/features/thread/ComposerSelectors";
+import { ModelSelectorDrawer, ThinkingOptionsDrawer } from "@/features/thread/ComposerSelectors";
 
 import {
   EnvironmentPicker,
@@ -45,12 +41,14 @@ import {
   SettingsSwitch,
 } from "./SettingsComponents";
 
-const TIMESTAMP_FORMAT_OPTIONS: readonly { readonly value: TimestampFormat; readonly label: string }[] =
-  [
-    { value: "locale", label: "System default" },
-    { value: "12-hour", label: "12-hour" },
-    { value: "24-hour", label: "24-hour" },
-  ];
+const TIMESTAMP_FORMAT_OPTIONS: readonly {
+  readonly value: TimestampFormat;
+  readonly label: string;
+}[] = [
+  { value: "locale", label: "System default" },
+  { value: "12-hour", label: "12-hour" },
+  { value: "24-hour", label: "24-hour" },
+];
 
 const THREAD_PREVIEW_OPTIONS: readonly {
   readonly value: SidebarThreadPreviewCount;
@@ -131,21 +129,31 @@ export function GeneralSettingsScreen() {
   const [threadModeSheetOpen, setThreadModeSheetOpen] = useState(false);
   const [modelSheetOpen, setModelSheetOpen] = useState(false);
   const [thinkingSheetOpen, setThinkingSheetOpen] = useState(false);
+  const [defaultModelSheetOpen, setDefaultModelSheetOpen] = useState(false);
+  const [defaultThinkingSheetOpen, setDefaultThinkingSheetOpen] = useState(false);
 
   const modelOptions = useMemo(
-    () => buildModelOptions(primaryEnvironment?.serverConfig ?? null, settings?.textGenerationModelSelection ?? null),
-    [primaryEnvironment?.serverConfig, settings?.textGenerationModelSelection]
+    () =>
+      buildModelOptions(
+        primaryEnvironment?.serverConfig ?? null,
+        settings?.textGenerationModelSelection ?? preferences.defaultThreadModelSelection
+      ),
+    [
+      preferences.defaultThreadModelSelection,
+      primaryEnvironment?.serverConfig,
+      settings?.textGenerationModelSelection,
+    ]
   );
 
   const textGenerationSelection = settings?.textGenerationModelSelection ?? null;
   const selectedModelOption = useMemo(
     () =>
       textGenerationSelection
-        ? modelOptions.find(
+        ? (modelOptions.find(
             (option) =>
               option.selection.instanceId === textGenerationSelection.instanceId &&
               option.selection.model === textGenerationSelection.model
-          ) ?? null
+          ) ?? null)
         : null,
     [modelOptions, textGenerationSelection]
   );
@@ -155,10 +163,36 @@ export function GeneralSettingsScreen() {
     if (!textGenerationSelection || thinkingDescriptors.length === 0) return null;
     const descriptor = thinkingDescriptors[0];
     if (!descriptor || descriptor.type !== "select") return null;
-    const value = textGenerationSelection.options?.find((option) => option.id === descriptor.id)?.value;
+    const value = textGenerationSelection.options?.find(
+      (option) => option.id === descriptor.id
+    )?.value;
     const option = descriptor.options.find((entry) => entry.id === value);
     return option?.label ?? String(value ?? "Default");
   }, [textGenerationSelection, thinkingDescriptors]);
+
+  const defaultThreadSelection = preferences.defaultThreadModelSelection;
+  const selectedDefaultModelOption = useMemo(
+    () =>
+      defaultThreadSelection
+        ? (modelOptions.find(
+            (option) =>
+              option.selection.instanceId === defaultThreadSelection.instanceId &&
+              option.selection.model === defaultThreadSelection.model
+          ) ?? null)
+        : null,
+    [defaultThreadSelection, modelOptions]
+  );
+  const defaultThinkingDescriptors = thinkingOptionDescriptors(selectedDefaultModelOption);
+  const defaultThinkingLabel = useMemo(() => {
+    if (!defaultThreadSelection || defaultThinkingDescriptors.length === 0) return null;
+    const descriptor = defaultThinkingDescriptors[0];
+    if (!descriptor || descriptor.type !== "select") return null;
+    const value = defaultThreadSelection.options?.find(
+      (option) => option.id === descriptor.id
+    )?.value;
+    const option = descriptor.options.find((entry) => entry.id === value);
+    return option?.label ?? String(value ?? "Default");
+  }, [defaultThreadSelection, defaultThinkingDescriptors]);
 
   const updateServerSetting = useCallback(
     async (patch: Parameters<typeof updateSettings>[0]) => {
@@ -195,9 +229,30 @@ export function GeneralSettingsScreen() {
     [textGenerationSelection, updateServerSetting]
   );
 
+  const updateDefaultThreadModel = useCallback(
+    async (option: ModelOption) => {
+      await updatePreferences({
+        defaultThreadModelSelection: normalizeModelSelection(option.selection),
+      });
+    },
+    [updatePreferences]
+  );
+
+  const updateDefaultThinkingOption = useCallback(
+    async (id: string, value: ProviderOptionSelectionValue) => {
+      if (!defaultThreadSelection) return;
+      await updatePreferences({
+        defaultThreadModelSelection: normalizeModelSelection(
+          setModelSelectionOption(defaultThreadSelection, id, value)
+        ),
+      });
+    },
+    [defaultThreadSelection, updatePreferences]
+  );
+
   const timestampLabel =
-    TIMESTAMP_FORMAT_OPTIONS.find((option) => option.value === preferences.timestampFormat)?.label ??
-    "System default";
+    TIMESTAMP_FORMAT_OPTIONS.find((option) => option.value === preferences.timestampFormat)
+      ?.label ?? "System default";
 
   return (
     <Screen>
@@ -210,9 +265,7 @@ export function GeneralSettingsScreen() {
             connectionState: environment.connectionState,
           }))}
           selectedEnvironmentId={environmentId}
-          onSelect={(nextEnvironmentId) =>
-            selectEnvironment(EnvironmentId.make(nextEnvironmentId))
-          }
+          onSelect={(nextEnvironmentId) => selectEnvironment(EnvironmentId.make(nextEnvironmentId))}
         />
 
         {!isLive && readyEnvironments.length > 0 ? (
@@ -222,9 +275,7 @@ export function GeneralSettingsScreen() {
           />
         ) : null}
 
-        {error ? (
-          <ConnectionBanner title="Server settings unavailable" detail={error} />
-        ) : null}
+        {error ? <ConnectionBanner title="Server settings unavailable" detail={error} /> : null}
 
         <SettingsSection title="General">
           <SettingsRow
@@ -235,6 +286,33 @@ export function GeneralSettingsScreen() {
                 label={timestampLabel}
                 onPress={() => setTimestampSheetOpen(true)}
               />
+            }
+          />
+          <SettingsDivider />
+          <SettingsRow
+            layout="stacked"
+            title="Default thread model"
+            description="Model and reasoning level used when this app creates a new thread."
+            control={
+              <View className="flex-col gap-2">
+                <SettingsPickerButton
+                  fullWidth
+                  disabled={modelOptions.length === 0}
+                  label={
+                    selectedDefaultModelOption?.label ??
+                    defaultThreadSelection?.model ??
+                    "Project default"
+                  }
+                  onPress={() => setDefaultModelSheetOpen(true)}
+                />
+                {defaultThinkingLabel ? (
+                  <SettingsPickerButton
+                    fullWidth
+                    label={defaultThinkingLabel}
+                    onPress={() => setDefaultThinkingSheetOpen(true)}
+                  />
+                ) : null}
+              </View>
             }
           />
           <SettingsDivider />
@@ -310,9 +388,7 @@ export function GeneralSettingsScreen() {
                 control={
                   <SettingsPickerButton
                     disabled={!isLive || !settings}
-                    label={
-                      settings?.defaultThreadEnvMode === "worktree" ? "New worktree" : "Local"
-                    }
+                    label={settings?.defaultThreadEnvMode === "worktree" ? "New worktree" : "Local"}
                     onPress={() => setThreadModeSheetOpen(true)}
                   />
                 }
@@ -328,7 +404,9 @@ export function GeneralSettingsScreen() {
                     <SettingsPickerButton
                       fullWidth
                       disabled={!isLive || !settings || modelOptions.length === 0}
-                      label={selectedModelOption?.label ?? textGenerationSelection?.model ?? "Choose"}
+                      label={
+                        selectedModelOption?.label ?? textGenerationSelection?.model ?? "Choose"
+                      }
                       onPress={() => setModelSheetOpen(true)}
                     />
                     {thinkingLabel ? (
@@ -376,13 +454,39 @@ export function GeneralSettingsScreen() {
 
       <ModelSelectorDrawer
         lockedProvider={false}
+        options={modelOptionsForConversation(modelOptions, defaultThreadSelection, false)}
+        selected={
+          defaultThreadSelection ??
+          modelOptions[0]?.selection ??
+          createModelSelection(ProviderInstanceId.make("codex"), DEFAULT_GIT_TEXT_GENERATION_MODEL)
+        }
+        visible={defaultModelSheetOpen}
+        onClose={() => setDefaultModelSheetOpen(false)}
+        onSelect={(option) => {
+          void updateDefaultThreadModel(option);
+          setDefaultModelSheetOpen(false);
+        }}
+      />
+
+      {defaultThreadSelection ? (
+        <ThinkingOptionsDrawer
+          descriptors={defaultThinkingDescriptors}
+          selection={defaultThreadSelection}
+          visible={defaultThinkingSheetOpen}
+          onClose={() => setDefaultThinkingSheetOpen(false)}
+          onSelect={(id, value) => {
+            void updateDefaultThinkingOption(id, value);
+            setDefaultThinkingSheetOpen(false);
+          }}
+        />
+      ) : null}
+
+      <ModelSelectorDrawer
+        lockedProvider={false}
         options={modelOptionsForConversation(modelOptions, textGenerationSelection, false)}
         selected={
           textGenerationSelection ??
-          createModelSelection(
-            ProviderInstanceId.make("codex"),
-            DEFAULT_GIT_TEXT_GENERATION_MODEL
-          )
+          createModelSelection(ProviderInstanceId.make("codex"), DEFAULT_GIT_TEXT_GENERATION_MODEL)
         }
         visible={modelSheetOpen}
         onClose={() => setModelSheetOpen(false)}
@@ -396,10 +500,7 @@ export function GeneralSettingsScreen() {
         descriptors={thinkingDescriptors}
         selection={
           textGenerationSelection ??
-          createModelSelection(
-            ProviderInstanceId.make("codex"),
-            DEFAULT_GIT_TEXT_GENERATION_MODEL
-          )
+          createModelSelection(ProviderInstanceId.make("codex"), DEFAULT_GIT_TEXT_GENERATION_MODEL)
         }
         visible={thinkingSheetOpen}
         onClose={() => setThinkingSheetOpen(false)}

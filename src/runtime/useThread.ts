@@ -5,6 +5,7 @@ import {
   MessageId,
   type ModelSelection,
   ThreadId,
+  type UploadChatAttachment,
   type OrchestrationMessage,
   type OrchestrationThread,
 } from "@t3tools/contracts";
@@ -26,11 +27,16 @@ interface ThreadState {
 
 export interface OptimisticMessage extends OrchestrationMessage {
   readonly optimistic?: true;
+  readonly localImageAttachments?: readonly {
+    readonly name: string;
+    readonly uri: string;
+  }[];
 }
 
 interface QueuedSend {
   readonly commandId: CommandId;
   readonly message: OptimisticMessage;
+  readonly uploadAttachments: readonly UploadChatAttachment[];
   readonly modelSelection: ModelSelection;
   readonly targetKey: string;
 }
@@ -244,7 +250,7 @@ export function useThread(environmentIdRaw: string, threadIdRaw: string) {
         messageId: queued.message.id,
         role: "user",
         text: queued.message.text,
-        attachments: [],
+        attachments: queued.uploadAttachments,
       },
       modelSelection: normalizeModelSelection(queued.modelSelection),
       runtimeMode: thread.runtimeMode,
@@ -271,21 +277,28 @@ export function useThread(environmentIdRaw: string, threadIdRaw: string) {
   }, [dispatchCommand, environmentId, isDispatching, queuedSends, state.data, targetKey, threadId]);
 
   const sendMessage = useCallback(
-    async (text: string, modelSelection: ModelSelection) => {
+    async (
+      text: string,
+      modelSelection: ModelSelection,
+      attachments: readonly UploadChatAttachment[] = [],
+      localImageAttachments: readonly { readonly name: string; readonly uri: string }[] = []
+    ) => {
       const thread = state.data;
-      if (!thread || !text.trim()) return;
+      const trimmed = text.trim();
+      if (!thread || (!trimmed && attachments.length === 0)) return;
       const createdAt = new Date().toISOString();
       const messageId = MessageId.make(newId());
       const optimistic: OptimisticMessage = {
         id: messageId,
         role: "user",
-        text: text.trim(),
+        text: trimmed,
         attachments: [],
         turnId: null,
         streaming: false,
         createdAt,
         updatedAt: createdAt,
         optimistic: true,
+        localImageAttachments,
       };
       setSendError(null);
       setOptimisticMessages((current) => [...current, optimistic]);
@@ -294,6 +307,7 @@ export function useThread(environmentIdRaw: string, threadIdRaw: string) {
         {
           commandId: CommandId.make(newId()),
           message: optimistic,
+          uploadAttachments: attachments,
           modelSelection,
           targetKey,
         },
