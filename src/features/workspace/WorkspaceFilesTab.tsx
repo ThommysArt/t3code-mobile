@@ -19,6 +19,7 @@ import {
 
 import { AppIcon } from "@/components/AppIcon";
 import { FileTypeIcon, fileIconKindForName } from "@/features/files/FileTypeIcon";
+import { SyntaxHighlightedCode } from "@/features/files/SyntaxHighlightedCode";
 import {
   joinWorkspacePath,
   relativePathWithinWorkspace,
@@ -501,22 +502,16 @@ export const WorkspaceFilesTab = memo(function WorkspaceFilesTab(props: {
               {selectedEntry.relativePath || selectedEntry.name}
             </Text>
           </View>
-          <ScrollView
-            style={{ flex: 1 }}
-            className="px-4 py-3"
-            contentContainerStyle={{ paddingBottom: 16 }}
-          >
+          <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 }}>
             {previewPending ? <ActivityIndicator color="#f97316" /> : null}
             {previewError ? <Text className="text-xs text-red-400">{previewError}</Text> : null}
             {previewTruncated ? (
               <Text className="mb-2 text-xs text-muted">Preview truncated for large files.</Text>
             ) : null}
             {previewText ? (
-              <Text className="font-mono text-[11px] leading-5 text-foreground" selectable>
-                {previewText}
-              </Text>
+              <SyntaxHighlightedCode fileName={selectedEntry.name} source={previewText} />
             ) : null}
-          </ScrollView>
+          </View>
         </View>
       ) : null}
     </View>
