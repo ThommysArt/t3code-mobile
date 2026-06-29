@@ -1,10 +1,12 @@
 import type { ExpoConfig } from "expo/config";
 
+const packageJson = require("./package.json") as { readonly version: string };
+
 const config: ExpoConfig = {
   name: "T3 Code Mobile",
   slug: "t3-code-mobile",
   owner: "thommysart24",
-  version: "0.1.0",
+  version: packageJson.version,
   orientation: "portrait",
   icon: "./assets/icon.png",
   scheme: "t3code-mobile",

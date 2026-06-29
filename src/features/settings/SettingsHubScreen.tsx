@@ -3,6 +3,7 @@ import { Text, View } from "react-native";
 import { BlurScreenRoot } from "@/components/chrome";
 import { Screen } from "@/components/Screen";
 import { useEnvironments } from "@/runtime/EnvironmentProvider";
+import { getAppVersionLabel } from "@/utils/appVersion";
 
 import {
   SettingsDivider,
@@ -35,10 +36,13 @@ export function SettingsHubScreen() {
           <SettingsNavRow label="Archives" href="/settings/archives" />
         </SettingsSection>
 
-        <View className="px-1">
+        <View className="px-1 gap-2">
           <Text className="text-xs leading-5 text-muted">
             Server settings sync with your connected T3 environment. Local preferences stay on this
             device.
+          </Text>
+          <Text className="text-xs leading-5 text-muted">
+            {getAppVersionLabel()} · com.t3tools.t3code.mobile
           </Text>
         </View>
       </SettingsScroll>
