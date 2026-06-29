@@ -10,7 +10,9 @@ export type AppIconName =
   | "copy"
   | "file"
   | "folder"
+  | "globe"
   | "git"
+  | "panels"
   | "image"
   | "plus"
   | "refresh"
@@ -106,6 +108,21 @@ export function AppIcon(props: {
           <Path d="M21 3v5h-5" {...common} />
           <Path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" {...common} />
           <Path d="M8 16H3v5" {...common} />
+        </>
+      ) : props.name === "globe" ? (
+        <>
+          <Circle cx="12" cy="12" r="9" {...common} />
+          <Line x1="3" y1="12" x2="21" y2="12" {...common} />
+          <Path
+            d="M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"
+            {...common}
+          />
+        </>
+      ) : props.name === "panels" ? (
+        <>
+          <Rect x="3" y="4" width="8" height="16" rx="1.5" {...common} />
+          <Rect x="13" y="4" width="8" height="7" rx="1.5" {...common} />
+          <Rect x="13" y="13" width="8" height="7" rx="1.5" {...common} />
         </>
       ) : props.name === "terminal" ? (
         <>

@@ -13,4 +13,9 @@ export {
   type CachedThreadDetail,
 } from "./threadDetailStore";
 export { loadThreadDraft, saveThreadDraft } from "./threadDraftStore";
+export {
+  loadWorkspaceTabs,
+  saveWorkspaceTabs,
+  type PersistedWorkspaceTabs,
+} from "./workspaceTabStore";
 export { getDatabase } from "./database";

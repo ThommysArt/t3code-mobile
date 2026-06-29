@@ -52,6 +52,10 @@ import {
 import { buildScopedCatalog } from "./catalog";
 import { effectRuntime } from "./effectRuntime";
 import { formatRemoteError, logStatus } from "./statusLog";
+import {
+  subscribeTerminalMetadata,
+  terminalSessionManager,
+} from "./useTerminalSession";
 import { loadConnections, saveConnections } from "./storage";
 import {
   normalizeHostInput,
@@ -185,7 +189,14 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
   const environmentByIdRef = useRef<Readonly<Record<string, EnvironmentViewState>>>({});
   const httpPollTimersRef = useRef(new Map<EnvironmentId, ReturnType<typeof setTimeout>>());
   const httpPollDeadlinesRef = useRef(new Map<EnvironmentId, number>());
+  const terminalMetadataUnsubscribersRef = useRef(new Map<EnvironmentId, () => void>());
   const mountedRef = useRef(true);
+
+  const clearTerminalMetadataSubscription = useCallback((environmentId: EnvironmentId) => {
+    terminalMetadataUnsubscribersRef.current.get(environmentId)?.();
+    terminalMetadataUnsubscribersRef.current.delete(environmentId);
+    terminalSessionManager.invalidateEnvironment(environmentId);
+  }, []);
 
   const updateEnvironment = useCallback(
     (
@@ -368,6 +379,7 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
 
       const existing = sessionsRef.current.get(environmentId);
       sessionsRef.current.delete(environmentId);
+      clearTerminalMetadataSubscription(environmentId);
       if (existing) await existing.connection.dispose().catch(() => undefined);
       if (!isCurrentAttempt()) return;
 
@@ -650,9 +662,18 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
           phase: "connected",
           inProgress: false,
         });
+        clearTerminalMetadataSubscription(environmentId);
+        terminalMetadataUnsubscribersRef.current.set(
+          environmentId,
+          subscribeTerminalMetadata({
+            environmentId,
+            client,
+          })
+        );
       } catch (error) {
         if (!isCurrentAttempt()) return;
         sessionsRef.current.delete(environmentId);
+        clearTerminalMetadataSubscription(environmentId);
         await environmentConnection.dispose().catch(() => undefined);
         logStatus("shell", "info", "Trying HTTP thread fallback", savedConnection.label, {
           environmentId,
@@ -695,7 +716,7 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
         );
       }
     },
-    [stopHttpPolling, syncHttpSnapshot, updateEnvironment]
+    [clearTerminalMetadataSubscription, stopHttpPolling, syncHttpSnapshot, updateEnvironment]
   );
 
   useEffect(() => {
@@ -898,6 +919,7 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
       stopHttpPolling(environmentId);
       const session = sessionsRef.current.get(environmentId);
       sessionsRef.current.delete(environmentId);
+      clearTerminalMetadataSubscription(environmentId);
       if (session) await session.connection.dispose().catch(() => undefined);
 
       const nextConnections = savedConnectionsRef.current.filter(
@@ -916,7 +938,7 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
         return nextState;
       });
     },
-    [stopHttpPolling]
+    [clearTerminalMetadataSubscription, stopHttpPolling]
   );
 
   const reconnect = useCallback(

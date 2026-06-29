@@ -637,6 +637,18 @@ export function ThreadScreen() {
             >
               <AppIcon name="git" size={20} color={theme.foreground} />
             </HeaderBubble>
+            <HeaderBubble
+              accessibilityLabel="Open workspace tools"
+              onPress={() =>
+                router.push({
+                  pathname: "/threads/[environmentId]/[threadId]/workspace",
+                  params: { environmentId, threadId },
+                })
+              }
+              variant="icon"
+            >
+              <AppIcon name="panels" size={20} color={theme.foreground} />
+            </HeaderBubble>
           </>
         }
         footer={

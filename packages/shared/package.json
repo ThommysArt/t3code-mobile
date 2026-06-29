@@ -22,6 +22,12 @@
       "import": "./src/remote.ts",
       "default": "./src/remote.ts"
     },
+    "./path": {
+      "types": "./src/path.ts",
+      "react-native": "./src/path.ts",
+      "import": "./src/path.ts",
+      "default": "./src/path.ts"
+    },
     "./model": {
       "types": "./src/model.ts",
       "react-native": "./src/model.ts",
@@ -33,6 +39,12 @@
       "react-native": "./src/serverSettings.ts",
       "import": "./src/serverSettings.ts",
       "default": "./src/serverSettings.ts"
+    },
+    "./terminalLabels": {
+      "types": "./src/terminalLabels.ts",
+      "react-native": "./src/terminalLabels.ts",
+      "import": "./src/terminalLabels.ts",
+      "default": "./src/terminalLabels.ts"
     }
   },
   "dependencies": {

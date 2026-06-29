@@ -81,6 +81,7 @@ export interface WsRpcClient {
   };
   readonly projects: {
     readonly searchEntries: RpcUnaryMethod<typeof WS_METHODS.projectsSearchEntries>;
+    readonly readFile: RpcUnaryMethod<typeof WS_METHODS.projectsReadFile>;
     readonly writeFile: RpcUnaryMethod<typeof WS_METHODS.projectsWriteFile>;
   };
   readonly filesystem: {
@@ -124,6 +125,18 @@ export interface WsRpcClient {
   };
   readonly review: {
     readonly getDiffPreview: RpcUnaryMethod<typeof WS_METHODS.reviewGetDiffPreview>;
+  };
+  readonly preview: {
+    readonly open: RpcUnaryMethod<typeof WS_METHODS.previewOpen>;
+    readonly navigate: RpcUnaryMethod<typeof WS_METHODS.previewNavigate>;
+    readonly refresh: RpcUnaryMethod<typeof WS_METHODS.previewRefresh>;
+    readonly close: RpcUnaryMethod<typeof WS_METHODS.previewClose>;
+    readonly list: RpcUnaryMethod<typeof WS_METHODS.previewList>;
+    readonly reportStatus: RpcUnaryMethod<typeof WS_METHODS.previewReportStatus>;
+    readonly onEvents: RpcStreamMethod<typeof WS_METHODS.subscribePreviewEvents>;
+    readonly onDiscoveredLocalServers: RpcStreamMethod<
+      typeof WS_METHODS.subscribeDiscoveredLocalServers
+    >;
   };
   readonly server: {
     readonly getConfig: RpcUnaryNoArgMethod<typeof WS_METHODS.serverGetConfig>;
@@ -215,6 +228,8 @@ export function createWsRpcClient(
     projects: {
       searchEntries: (input) =>
         transport.request((client) => client[WS_METHODS.projectsSearchEntries](input)),
+      readFile: (input) =>
+        transport.request((client) => client[WS_METHODS.projectsReadFile](input)),
       writeFile: (input) =>
         transport.request((client) => client[WS_METHODS.projectsWriteFile](input)),
     },
@@ -285,6 +300,27 @@ export function createWsRpcClient(
     review: {
       getDiffPreview: (input) =>
         transport.request((client) => client[WS_METHODS.reviewGetDiffPreview](input)),
+    },
+    preview: {
+      open: (input) => transport.request((client) => client[WS_METHODS.previewOpen](input)),
+      navigate: (input) => transport.request((client) => client[WS_METHODS.previewNavigate](input)),
+      refresh: (input) => transport.request((client) => client[WS_METHODS.previewRefresh](input)),
+      close: (input) => transport.request((client) => client[WS_METHODS.previewClose](input)),
+      list: (input) => transport.request((client) => client[WS_METHODS.previewList](input)),
+      reportStatus: (input) =>
+        transport.request((client) => client[WS_METHODS.previewReportStatus](input)),
+      onEvents: (listener, options) =>
+        transport.subscribe(
+          (client) => client[WS_METHODS.subscribePreviewEvents]({}),
+          listener,
+          subscriptionOptions(options, WS_METHODS.subscribePreviewEvents)
+        ),
+      onDiscoveredLocalServers: (listener, options) =>
+        transport.subscribe(
+          (client) => client[WS_METHODS.subscribeDiscoveredLocalServers]({}),
+          listener,
+          subscriptionOptions(options, WS_METHODS.subscribeDiscoveredLocalServers)
+        ),
     },
     server: {
       getConfig: () => transport.request((client) => client[WS_METHODS.serverGetConfig]({})),

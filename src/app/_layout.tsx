@@ -1,6 +1,7 @@
+import { RegistryContext } from "@effect/atom-react";
 import { Stack } from "expo-router";
 import { HeroUINativeProvider } from "heroui-native";
-import { useColorScheme } from "react-native";
+import { useColorScheme, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -8,6 +9,7 @@ import { StatusBar } from "expo-status-bar";
 
 import "../global.css";
 import { StatusToastBridge } from "@/components/StatusToastBridge";
+import { appAtomRegistry } from "@/runtime/atom-registry";
 import { EnvironmentProvider } from "@/runtime/EnvironmentProvider";
 import { PreferencesProvider } from "@/runtime/PreferencesProvider";
 
@@ -27,7 +29,6 @@ export default function RootLayout() {
                 isSwipeable: true,
               },
               insets: {
-                top: 64,
                 left: 12,
                 right: 12,
               },
@@ -35,11 +36,17 @@ export default function RootLayout() {
           }}
         >
           <PreferencesProvider>
-            <EnvironmentProvider>
-              <StatusToastBridge />
-              <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
-              <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor } }} />
-            </EnvironmentProvider>
+            <RegistryContext.Provider value={appAtomRegistry}>
+              <EnvironmentProvider>
+                <View style={{ flex: 1, position: "relative" }}>
+                  <StatusToastBridge />
+                  <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />
+                  <Stack
+                    screenOptions={{ headerShown: false, contentStyle: { backgroundColor } }}
+                  />
+                </View>
+              </EnvironmentProvider>
+            </RegistryContext.Provider>
           </PreferencesProvider>
         </HeroUINativeProvider>
         </KeyboardProvider>

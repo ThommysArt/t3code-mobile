@@ -1,7 +1,7 @@
 import * as SQLite from "expo-sqlite";
 
 const DATABASE_NAME = "t3code-minimal.db";
-const DATABASE_VERSION = 2;
+const DATABASE_VERSION = 3;
 
 let databasePromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
@@ -46,6 +46,18 @@ async function migrateDatabase(db: SQLite.SQLiteDatabase): Promise<void> {
         environment_id TEXT NOT NULL,
         thread_id TEXT NOT NULL,
         draft_text TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (environment_id, thread_id)
+      );
+    `);
+  }
+
+  if (currentVersion < 3) {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS workspace_tabs (
+        environment_id TEXT NOT NULL,
+        thread_id TEXT NOT NULL,
+        tabs_json TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         PRIMARY KEY (environment_id, thread_id)
       );

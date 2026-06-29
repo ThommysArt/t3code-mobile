@@ -11,3 +11,7 @@ export * from "./wsTransport.ts";
 export * from "./wsRpcClient.ts";
 export * from "./environmentConnection.ts";
 export * from "./remote.ts";
+export * from "./terminalSessionState.ts";
+export * from "./filesystemBrowseState.ts";
+export * from "./checkpointDiffState.ts";
+export * from "./projectPaths.ts";
