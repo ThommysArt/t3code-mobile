@@ -4,6 +4,7 @@ export type AppIconName =
   | "arrow-up"
   | "back"
   | "branch"
+  | "check"
   | "chevron-down"
   | "chevron-right"
   | "compose"
@@ -21,6 +22,7 @@ export type AppIconName =
   | "stop"
   | "terminal"
   | "wifi"
+  | "wrench"
   | "x";
 
 export function AppIcon(props: {
@@ -145,6 +147,13 @@ export function AppIcon(props: {
         </>
       ) : props.name === "chevron-right" ? (
         <Polyline points="9 6 15 12 9 18" {...common} />
+      ) : props.name === "check" ? (
+        <Polyline points="5 12 10 17 19 7" {...common} />
+      ) : props.name === "wrench" ? (
+        <Path
+          d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18v3h3l6.3-6.3a4 4 0 0 0 5.4-5.4l-2.1 2.1-3.4-3.4Z"
+          {...common}
+        />
       ) : (
         <Polyline points="6 9 12 15 18 9" {...common} />
       )}

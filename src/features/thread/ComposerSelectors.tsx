@@ -2,7 +2,7 @@ import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import type { ModelSelection, ProviderOptionSelectionValue } from "@t3tools/contracts";
 import { BottomSheet, SearchField } from "heroui-native";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Keyboard, Pressable, Text, View } from "react-native";
 
 import { ProviderIcon } from "@/components/ProviderIcon";
 import {
@@ -23,6 +23,10 @@ function SelectorSheet({
   readonly visible: boolean;
   readonly onClose: () => void;
 }) {
+  useEffect(() => {
+    if (visible) Keyboard.dismiss();
+  }, [visible]);
+
   return (
     <BottomSheet
       isOpen={visible}

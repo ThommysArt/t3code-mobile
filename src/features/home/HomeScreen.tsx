@@ -24,6 +24,7 @@ import { Screen } from "@/components/Screen";
 import { estimatedSearchChromeHeight } from "@/utils/bottomChrome";
 import { useEnvironments } from "@/runtime/EnvironmentProvider";
 import { usePreferences } from "@/runtime/PreferencesProvider";
+import { compareThreadsByInitiatedAt, getThreadInitiatedAt } from "@/runtime/catalog";
 import { logStatus } from "@/runtime/statusLog";
 import { relativeTime } from "@/utils/time";
 
@@ -174,7 +175,7 @@ function ThreadRow(props: {
               </Text>
             </View>
             <Text style={{ width: 30, color: muted, fontSize: 11, textAlign: "right" }}>
-              {relativeTime(props.thread.updatedAt ?? props.thread.createdAt)}
+              {relativeTime(getThreadInitiatedAt(props.thread))}
             </Text>
           </View>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
@@ -239,9 +240,7 @@ export function HomeScreen() {
           key,
           project,
           title: project?.title ?? "Unassigned",
-          threads: groupThreads.sort((left, right) =>
-            (right.updatedAt ?? right.createdAt).localeCompare(left.updatedAt ?? left.createdAt)
-          ),
+          threads: groupThreads.sort(compareThreadsByInitiatedAt),
         };
       })
       .filter(
@@ -255,8 +254,8 @@ export function HomeScreen() {
           )
       )
       .sort((left, right) => {
-        const leftDate = left.threads[0]?.updatedAt ?? left.threads[0]?.createdAt ?? "";
-        const rightDate = right.threads[0]?.updatedAt ?? right.threads[0]?.createdAt ?? "";
+        const leftDate = left.threads[0] ? getThreadInitiatedAt(left.threads[0]) : "";
+        const rightDate = right.threads[0] ? getThreadInitiatedAt(right.threads[0]) : "";
         return rightDate.localeCompare(leftDate);
       });
   }, [projects, search, threads]);
@@ -323,7 +322,12 @@ export function HomeScreen() {
               <View style={{ alignItems: "center", flexDirection: "row", gap: 8, minWidth: 0 }}>
                 <Text
                   numberOfLines={1}
-                  style={{ color: theme.foreground, fontSize: 15, fontWeight: "600", lineHeight: 17 }}
+                  style={{
+                    color: theme.foreground,
+                    fontSize: 15,
+                    fontWeight: "600",
+                    lineHeight: 17,
+                  }}
                 >
                   T3 Code
                 </Text>
@@ -411,162 +415,162 @@ export function HomeScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-        {environments.length > 0 ? (
-          <View className="flex-row items-center gap-1.5">
-            <View className="h-2 w-2 rounded-full" style={{ backgroundColor: connectionColor }} />
-            <Text className="text-[11px] font-semibold text-muted">{connectionLabel}</Text>
-            <Text className="text-[11px] text-muted">
-              {threads.length} thread{threads.length === 1 ? "" : "s"}
-            </Text>
-            {isConnecting ? <ActivityIndicator size="small" color={connectionColor} /> : null}
-          </View>
-        ) : null}
-        {isBootstrapping ? (
-          <View className="items-center gap-3 rounded-3xl border border-border bg-surface px-5 py-10">
-            <ActivityIndicator color="#f97316" />
-            <Text className="text-sm text-muted">Restoring environments and cached threads</Text>
-          </View>
-        ) : environments.length === 0 ? (
-          <View className="items-center gap-4 rounded-3xl border border-border bg-surface px-6 py-12">
-            <View className="h-14 w-14 items-center justify-center rounded-2xl bg-default">
-              <AppIcon name="wifi" size={27} color={isDark ? "#d4d4d4" : "#525252"} />
-            </View>
-            <View className="items-center gap-2">
-              <Text className="text-lg font-bold text-foreground">Connect your T3 server</Text>
-              <Text className="text-center text-sm leading-6 text-muted">
-                Pair with the Tailscale or local server URL to sync projects and threads.
+          {environments.length > 0 ? (
+            <View className="flex-row items-center gap-1.5">
+              <View className="h-2 w-2 rounded-full" style={{ backgroundColor: connectionColor }} />
+              <Text className="text-[11px] font-semibold text-muted">{connectionLabel}</Text>
+              <Text className="text-[11px] text-muted">
+                {threads.length} thread{threads.length === 1 ? "" : "s"}
               </Text>
+              {isConnecting ? <ActivityIndicator size="small" color={connectionColor} /> : null}
             </View>
-            <Pressable
-              onPress={() => router.push("/settings/server")}
-              className="rounded-full bg-accent px-6 py-3"
-            >
-              <Text className="font-semibold text-accent-foreground">Add server</Text>
-            </Pressable>
-          </View>
-        ) : groups.length === 0 ? (
-          <View className="items-center gap-3 rounded-3xl border border-border bg-surface px-6 py-10">
-            <Text className="text-lg font-bold text-foreground">
-              {search.trim() ? "No matching threads" : "No threads found"}
-            </Text>
-            <Text className="text-center text-sm leading-6 text-muted">
-              {search.trim()
-                ? "Try a thread title, project, or branch name."
-                : "Refresh the environment or create a thread from another T3 Code client."}
-            </Text>
-            {!search.trim() ? (
+          ) : null}
+          {isBootstrapping ? (
+            <View className="items-center gap-3 rounded-3xl border border-border bg-surface px-5 py-10">
+              <ActivityIndicator color="#f97316" />
+              <Text className="text-sm text-muted">Restoring environments and cached threads</Text>
+            </View>
+          ) : environments.length === 0 ? (
+            <View className="items-center gap-4 rounded-3xl border border-border bg-surface px-6 py-12">
+              <View className="h-14 w-14 items-center justify-center rounded-2xl bg-default">
+                <AppIcon name="wifi" size={27} color={isDark ? "#d4d4d4" : "#525252"} />
+              </View>
+              <View className="items-center gap-2">
+                <Text className="text-lg font-bold text-foreground">Connect your T3 server</Text>
+                <Text className="text-center text-sm leading-6 text-muted">
+                  Pair with the Tailscale or local server URL to sync projects and threads.
+                </Text>
+              </View>
               <Pressable
-                onPress={() => void reloadThreads()}
-                className="flex-row items-center gap-2 rounded-full bg-default px-4 py-2.5"
+                onPress={() => router.push("/settings/server")}
+                className="rounded-full bg-accent px-6 py-3"
               >
-                <AppIcon name="refresh" size={16} color={isDark ? "#f5f5f5" : "#262626"} />
-                <Text className="text-sm font-semibold text-foreground">Refresh</Text>
+                <Text className="font-semibold text-accent-foreground">Add server</Text>
               </Pressable>
-            ) : null}
-          </View>
-        ) : (
-          groups.map((group) => {
-            const isExpanded = expandedGroups.has(group.key);
-            const visibleThreads = isExpanded
-              ? group.threads
-              : group.threads.slice(0, collapsedThreadLimit);
-            const hiddenCount = group.threads.length - visibleThreads.length;
-            return (
-              <View key={group.key} style={{ gap: 7 }}>
-                <View
-                  style={{
-                    minHeight: 22,
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 6,
-                    paddingHorizontal: 6,
-                  }}
+            </View>
+          ) : groups.length === 0 ? (
+            <View className="items-center gap-3 rounded-3xl border border-border bg-surface px-6 py-10">
+              <Text className="text-lg font-bold text-foreground">
+                {search.trim() ? "No matching threads" : "No threads found"}
+              </Text>
+              <Text className="text-center text-sm leading-6 text-muted">
+                {search.trim()
+                  ? "Try a thread title, project, or branch name."
+                  : "Refresh the environment or create a thread from another T3 Code client."}
+              </Text>
+              {!search.trim() ? (
+                <Pressable
+                  onPress={() => void reloadThreads()}
+                  className="flex-row items-center gap-2 rounded-full bg-default px-4 py-2.5"
                 >
-                  <AppIcon name="folder" size={14} color={muted} />
-                  <Text
+                  <AppIcon name="refresh" size={16} color={isDark ? "#f5f5f5" : "#262626"} />
+                  <Text className="text-sm font-semibold text-foreground">Refresh</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : (
+            groups.map((group) => {
+              const isExpanded = expandedGroups.has(group.key);
+              const visibleThreads = isExpanded
+                ? group.threads
+                : group.threads.slice(0, collapsedThreadLimit);
+              const hiddenCount = group.threads.length - visibleThreads.length;
+              return (
+                <View key={group.key} style={{ gap: 7 }}>
+                  <View
                     style={{
-                      flex: 1,
-                      color: muted,
-                      fontSize: 12,
-                      fontWeight: "700",
-                      letterSpacing: 0.6,
-                      textTransform: "uppercase",
+                      minHeight: 22,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 6,
+                      paddingHorizontal: 6,
                     }}
-                    numberOfLines={1}
                   >
-                    {group.title}
-                  </Text>
-                  {group.threads.length > collapsedThreadLimit ? (
-                    <Pressable
-                      hitSlop={10}
-                      onPress={() =>
-                        setExpandedGroups((current) => {
-                          const next = new Set(current);
-                          if (next.has(group.key)) next.delete(group.key);
-                          else next.add(group.key);
-                          return next;
-                        })
-                      }
+                    <AppIcon name="folder" size={14} color={muted} />
+                    <Text
+                      style={{
+                        flex: 1,
+                        color: muted,
+                        fontSize: 12,
+                        fontWeight: "700",
+                        letterSpacing: 0.6,
+                        textTransform: "uppercase",
+                      }}
+                      numberOfLines={1}
                     >
-                      <Text style={{ color: muted, fontSize: 11, fontWeight: "600" }}>
-                        {isExpanded ? "Show less" : `${hiddenCount} more`}
-                      </Text>
-                    </Pressable>
-                  ) : null}
-                  {group.project ? (
-                    <Pressable
-                      accessibilityLabel={`Create thread in ${group.title}`}
-                      hitSlop={8}
-                      onPress={() =>
-                        router.push({
-                          pathname: "/projects/[environmentId]/[projectId]/new-thread",
-                          params: {
-                            environmentId: group.project!.environmentId,
-                            projectId: group.project!.id,
-                          },
-                        })
-                      }
-                      className="h-6 w-6 items-center justify-center rounded-full bg-default"
-                    >
-                      <AppIcon name="plus" size={13} color={isDark ? "#d4d4d4" : "#525252"} />
-                    </Pressable>
-                  ) : null}
-                </View>
-                <View
-                  style={{
-                    overflow: "hidden",
-                    borderRadius: 20,
-                    borderWidth: 1,
-                    borderColor: border,
-                    backgroundColor: surface,
-                  }}
-                >
-                  {visibleThreads.length > 0 ? (
-                    visibleThreads.map((thread, index) => (
-                      <ThreadRow
-                        key={`${thread.environmentId}:${thread.id}`}
-                        thread={thread}
-                        isDark={isDark}
-                        isLast={index === visibleThreads.length - 1}
+                      {group.title}
+                    </Text>
+                    {group.threads.length > collapsedThreadLimit ? (
+                      <Pressable
+                        hitSlop={10}
+                        onPress={() =>
+                          setExpandedGroups((current) => {
+                            const next = new Set(current);
+                            if (next.has(group.key)) next.delete(group.key);
+                            else next.add(group.key);
+                            return next;
+                          })
+                        }
+                      >
+                        <Text style={{ color: muted, fontSize: 11, fontWeight: "600" }}>
+                          {isExpanded ? "Show less" : `${hiddenCount} more`}
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                    {group.project ? (
+                      <Pressable
+                        accessibilityLabel={`Create thread in ${group.title}`}
+                        hitSlop={8}
                         onPress={() =>
                           router.push({
-                            pathname: "/threads/[environmentId]/[threadId]",
+                            pathname: "/projects/[environmentId]/[projectId]/new-thread",
                             params: {
-                              environmentId: thread.environmentId,
-                              threadId: thread.id,
+                              environmentId: group.project!.environmentId,
+                              projectId: group.project!.id,
                             },
                           })
                         }
-                      />
-                    ))
-                  ) : (
-                    <Text className="px-4 py-5 text-sm text-muted">No threads yet</Text>
-                  )}
+                        className="h-6 w-6 items-center justify-center rounded-full bg-default"
+                      >
+                        <AppIcon name="plus" size={13} color={isDark ? "#d4d4d4" : "#525252"} />
+                      </Pressable>
+                    ) : null}
+                  </View>
+                  <View
+                    style={{
+                      overflow: "hidden",
+                      borderRadius: 20,
+                      borderWidth: 1,
+                      borderColor: border,
+                      backgroundColor: surface,
+                    }}
+                  >
+                    {visibleThreads.length > 0 ? (
+                      visibleThreads.map((thread, index) => (
+                        <ThreadRow
+                          key={`${thread.environmentId}:${thread.id}`}
+                          thread={thread}
+                          isDark={isDark}
+                          isLast={index === visibleThreads.length - 1}
+                          onPress={() =>
+                            router.push({
+                              pathname: "/threads/[environmentId]/[threadId]",
+                              params: {
+                                environmentId: thread.environmentId,
+                                threadId: thread.id,
+                              },
+                            })
+                          }
+                        />
+                      ))
+                    ) : (
+                      <Text className="px-4 py-5 text-sm text-muted">No threads yet</Text>
+                    )}
+                  </View>
                 </View>
-              </View>
-            );
-          })
-        )}
+              );
+            })
+          )}
         </ScrollView>
       </BlurScreenRoot>
     </Screen>

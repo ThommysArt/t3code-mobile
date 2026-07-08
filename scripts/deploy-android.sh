@@ -17,7 +17,8 @@ Usage:
   pnpm deploy:android --release 0.0.6 "Commit message"
 
 Options:
-  --release [VERSION]  Bump package.json version (patch if omitted), commit, tag vX.Y.Z, and push tag.
+  --release [VERSION]  Bump package.json version (patch if omitted), tag vX.Y.Z,
+                       push, publish a GitHub release, and start an EAS build.
 EOF
 }
 
@@ -53,9 +54,12 @@ read_package_version() {
 
 write_package_version() {
   local next_version="$1"
-  node <<'NODE' "$next_version"
+  NEXT_VERSION="$next_version" node <<'NODE'
 const fs = require("node:fs");
-const nextVersion = process.argv[1];
+const nextVersion = process.env.NEXT_VERSION;
+if (!nextVersion) {
+  throw new Error("NEXT_VERSION is required");
+}
 const packagePath = "package.json";
 const packageJson = JSON.parse(fs.readFileSync(packagePath, "utf8"));
 packageJson.version = nextVersion;
@@ -85,6 +89,27 @@ resolve_release_version() {
   exit 1
 }
 
+commit_changes() {
+  if [[ -z "$COMMIT_MESSAGE" ]]; then
+    if ! git diff --quiet || ! git diff --cached --quiet || [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
+      echo "Working tree has uncommitted changes. Pass a commit message:"
+      echo "  pnpm deploy:android \"Your commit message\""
+      echo "  pnpm deploy:android --release \"Your commit message\""
+      exit 1
+    fi
+    echo "Working tree clean; skipping feature commit."
+    return
+  fi
+
+  if git diff --quiet && git diff --cached --quiet && [[ -z "$(git ls-files --others --exclude-standard)" ]]; then
+    echo "Nothing to commit; continuing with release and build."
+    return
+  fi
+
+  git add -A
+  git commit -m "$COMMIT_MESSAGE"
+}
+
 prepare_release() {
   local next_version tag
   next_version="$(resolve_release_version)"
@@ -102,6 +127,29 @@ prepare_release() {
   echo "Prepared release ${tag}"
 }
 
+create_github_release() {
+  local version tag title
+  version="$(read_package_version)"
+  tag="v${version}"
+  title="T3 Code Mobile ${tag}"
+
+  if ! command -v gh >/dev/null 2>&1; then
+    echo "gh CLI not found; skipping GitHub release creation."
+    return
+  fi
+
+  if gh release view "$tag" >/dev/null 2>&1; then
+    echo "GitHub release ${tag} already exists."
+    return
+  fi
+
+  gh release create "$tag" \
+    --title "$title" \
+    --generate-notes \
+    --latest
+  echo "Published GitHub release ${tag}"
+}
+
 run_checks() {
   echo "Running tests..."
   pnpm test
@@ -111,31 +159,17 @@ run_checks() {
 }
 
 commit_and_push() {
+  commit_changes
+
   if [[ -n "$RELEASE_TAG" ]]; then
     prepare_release
-  fi
-
-  if [[ -z "$COMMIT_MESSAGE" ]]; then
-    if ! git diff --quiet || ! git diff --cached --quiet || [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
-      echo "Working tree has uncommitted changes. Pass a commit message:"
-      echo "  pnpm deploy:android \"Your commit message\""
-      echo "  pnpm deploy:android --release \"Your commit message\""
-      exit 1
-    fi
-    echo "Working tree clean; skipping commit."
-  else
-    if git diff --quiet && git diff --cached --quiet && [[ -z "$(git ls-files --others --exclude-standard)" ]]; then
-      echo "Nothing to commit; continuing with push and build."
-    else
-      git add -A
-      git commit -m "$COMMIT_MESSAGE"
-    fi
   fi
 
   echo "Pushing to origin..."
   git push origin HEAD
   if [[ -n "$RELEASE_TAG" ]]; then
     git push origin "v$(read_package_version)"
+    create_github_release
   fi
 }
 
@@ -143,7 +177,7 @@ start_build() {
   local version
   version="$(read_package_version)"
   echo "Starting EAS ${PLATFORM} build (profile: ${PROFILE}, version: v${version}, no-wait)..."
-  pnpm exec eas build \
+  pnpm dlx eas-cli build \
     --profile "$PROFILE" \
     --platform "$PLATFORM" \
     --non-interactive \
@@ -154,4 +188,4 @@ run_checks
 commit_and_push
 start_build
 
-echo "Deploy submitted. Track the build in the EAS dashboard or with: pnpm exec eas build:list"
+echo "Deploy submitted. Track the build in the EAS dashboard or with: pnpm dlx eas-cli build:list"

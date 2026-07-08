@@ -118,6 +118,29 @@ WebSocket, receiving the shell snapshot, publishing the thread catalog, and upda
 catalog as separate steps. A successful WebSocket connection does not start the expensive HTTP
 full-history fallback.
 
+## Release and deploy
+
+Version numbers live in `package.json` and flow into `app.config.ts`. Releases use annotated
+semver tags (`v0.0.6`) and publish GitHub releases titled `T3 Code Mobile vX.Y.Z`.
+
+```sh
+# Commit, push, and start a preview Android EAS build
+pnpm deploy:android "Describe the change"
+
+# Patch bump, tag, GitHub release, push, and EAS build
+pnpm release:android "Describe the release"
+```
+
+The deploy script runs tests and typecheck first, commits your changes, creates the release tag
+after the feature commit, pushes `main` and the tag, publishes the GitHub release with generated
+notes, then submits a non-blocking EAS `preview-android` build.
+
+GitHub Actions also runs CI on every push/PR and, when a `v*.*.*` tag is pushed, validates the
+tag and publishes the GitHub release. Add an `EXPO_TOKEN` repository secret to let the tag workflow
+submit EAS builds from CI as well.
+
+See [`CHANGELOG.md`](CHANGELOG.md) for release history.
+
 ## Validation
 
 ```sh

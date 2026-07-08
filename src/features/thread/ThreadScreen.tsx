@@ -1,4 +1,9 @@
-import type { ModelSelection, OrchestrationMessage } from "@t3tools/contracts";
+import type {
+  ModelSelection,
+  OrchestrationCheckpointSummary,
+  OrchestrationMessage,
+  TurnId,
+} from "@t3tools/contracts";
 import * as Clipboard from "expo-clipboard";
 import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
@@ -46,7 +51,16 @@ import {
   thinkingOptionDescriptors,
   type ModelOption,
 } from "./modelOptions";
-import { buildThreadFeed, formatWorkDuration, type ThreadFeedEntry } from "./threadFeed";
+import {
+  buildThreadFeed,
+  deriveThreadFeedPresentation,
+  type ThreadFeedEntry,
+} from "./threadActivity";
+import {
+  AssistantChangedFiles,
+  ThreadWorkGroupToggle,
+  ThreadWorkLog,
+} from "./ThreadWorkLog";
 
 function firstParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? (value[0] ?? "") : (value ?? "");
@@ -254,125 +268,175 @@ function MessageRow({
   );
 }
 
-function WorkLogGroup({
-  entry,
-  expanded,
-  onToggle,
+function AssistantMessageRow({
+  bearerToken,
+  checkpoint,
+  httpBaseUrl,
+  message,
+  showMeta,
 }: {
-  readonly entry: Extract<ThreadFeedEntry, { type: "work-log" }>;
-  readonly expanded: boolean;
-  readonly onToggle: () => void;
+  readonly bearerToken: string | null;
+  readonly checkpoint: OrchestrationCheckpointSummary | null;
+  readonly httpBaseUrl: string | null;
+  readonly message: OrchestrationMessage;
+  readonly showMeta: boolean;
 }) {
   const isDark = useColorScheme() === "dark";
+  const [copied, setCopied] = useState(false);
+  const attachments = message.attachments ?? [];
+  const headers = attachmentHeaders(bearerToken);
+  const text = message.text.trim();
+
+  if (text.length === 0 && attachments.length === 0) {
+    return null;
+  }
+
+  const copyMessage = () => {
+    if (!text) return;
+    void Clipboard.setStringAsync(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    });
+  };
 
   return (
-    <View className="overflow-hidden rounded-2xl border border-border bg-surface">
-      <Pressable
-        accessibilityRole="button"
-        accessibilityState={{ expanded }}
-        onPress={onToggle}
-        className="flex-row items-center gap-2 px-4 py-3"
-      >
-        <Text className="flex-1 text-sm font-medium text-muted">
-          Worked for {formatWorkDuration(entry.startedAt, entry.completedAt)}
-        </Text>
-        <View style={{ transform: [{ rotate: expanded ? "180deg" : "-90deg" }] }}>
-          <AppIcon name="chevron-down" size={16} color={isDark ? "#858585" : "#737373"} />
-        </View>
-      </Pressable>
-      {expanded ? (
-        <View className="border-t border-separator px-3 py-1">
-          {entry.rows.map((row, index) => (
-            <View
-              key={row.id}
-              className={`flex-row gap-3 px-1 py-2.5 ${
-                index > 0 ? "border-t border-separator" : ""
-              }`}
-            >
-              <View
-                className={`mt-1.5 h-2 w-2 rounded-full ${
-                  row.tone === "error"
-                    ? "bg-danger"
-                    : row.tone === "tool"
-                      ? "bg-accent"
-                      : "bg-muted"
-                }`}
-              />
-              <View className="flex-1">
-                <MarkdownContent compact text={row.summary} />
-                {row.detail ? (
-                  <View className="mt-1">
-                    <MarkdownContent compact text={row.detail} />
-                  </View>
-                ) : null}
-              </View>
-            </View>
-          ))}
+    <View className={showMeta ? "mb-5 px-1" : "mb-2 px-1"}>
+      {text ? <MarkdownContent text={message.text} /> : null}
+      {attachments.map((attachment) => {
+        const uri = messageImageUrl(httpBaseUrl, attachment.id);
+        if (!uri) return null;
+        return (
+          <MessageAttachment
+            key={attachment.id}
+            headers={headers}
+            name={attachment.name}
+            uri={uri}
+          />
+        );
+      })}
+      {checkpoint ? <AssistantChangedFiles checkpoint={checkpoint} /> : null}
+      {showMeta ? (
+        <View className="mt-1 flex-row items-center gap-2">
+          <Pressable
+            accessibilityLabel={copied ? "Response copied" : "Copy response"}
+            accessibilityRole="button"
+            hitSlop={8}
+            onPress={copyMessage}
+            className="flex-row items-center gap-1 rounded-full px-1.5 py-0.5"
+          >
+            <AppIcon name="copy" size={12} color={isDark ? "#858585" : "#737373"} />
+            <Text className="text-[11px] font-semibold text-muted">
+              {copied ? "Copied" : "Copy"}
+            </Text>
+          </Pressable>
+          <Text className="text-[11px] text-muted">
+            {relativeTime(message.updatedAt)}
+            {message.streaming ? " · live" : ""}
+          </Text>
         </View>
       ) : null}
     </View>
   );
 }
 
-function ChangedFilesCard({
+function FeedEntryRow({
+  bearerToken,
+  checkpointByAssistantMessageId,
+  copiedWorkRowId,
   entry,
+  expandedWorkRows,
+  httpBaseUrl,
+  terminalAssistantMessageIds,
+  unsettledTurnId,
+  onCopyWorkRow,
+  onToggleTurnFold,
+  onToggleWorkGroup,
+  onToggleWorkRow,
 }: {
-  readonly entry: Extract<ThreadFeedEntry, { type: "changed-files" }>;
+  readonly bearerToken: string | null;
+  readonly checkpointByAssistantMessageId: ReadonlyMap<
+    OrchestrationMessage["id"],
+    OrchestrationCheckpointSummary
+  >;
+  readonly copiedWorkRowId: string | null;
+  readonly entry: ThreadFeedEntry;
+  readonly expandedWorkRows: Readonly<Record<string, boolean>>;
+  readonly httpBaseUrl: string | null;
+  readonly terminalAssistantMessageIds: ReadonlySet<string>;
+  readonly unsettledTurnId: TurnId | null;
+  readonly onCopyWorkRow: (rowId: string, value: string) => void;
+  readonly onToggleTurnFold: (turnId: TurnId) => void;
+  readonly onToggleWorkGroup: (groupId: string) => void;
+  readonly onToggleWorkRow: (rowId: string) => void;
 }) {
   const isDark = useColorScheme() === "dark";
-  const [expanded, setExpanded] = useState(false);
-  const files = entry.checkpoint.files;
-  const visibleFiles = expanded ? files : files.slice(0, 5);
-  const additions = files.reduce((total, file) => total + file.additions, 0);
-  const deletions = files.reduce((total, file) => total + file.deletions, 0);
+
+  if (entry.type === "turn-fold") {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: entry.expanded }}
+        onPress={() => onToggleTurnFold(entry.turnId)}
+        hitSlop={4}
+        className="mb-3 min-h-11 flex-row items-center gap-2 border-b border-separator px-2"
+      >
+        <Text className="flex-1 text-sm font-medium tabular-nums text-muted">{entry.label}</Text>
+        <AppIcon
+          name={entry.expanded ? "chevron-down" : "chevron-right"}
+          size={15}
+          color={isDark ? "#858585" : "#737373"}
+        />
+      </Pressable>
+    );
+  }
+
+  if (entry.type === "work-toggle") {
+    return (
+      <ThreadWorkGroupToggle
+        expanded={entry.expanded}
+        hiddenCount={entry.hiddenCount}
+        onlyToolActivities={entry.onlyToolActivities}
+        onToggle={() => onToggleWorkGroup(entry.groupId)}
+      />
+    );
+  }
+
+  if (entry.type === "message") {
+    const { message } = entry;
+    if (message.role === "user") {
+      return (
+        <MessageRow bearerToken={bearerToken} httpBaseUrl={httpBaseUrl} message={message} />
+      );
+    }
+
+    const assistantTurnStillInProgress =
+      message.turnId !== null &&
+      unsettledTurnId !== null &&
+      message.turnId === unsettledTurnId;
+    const showMeta =
+      terminalAssistantMessageIds.has(message.id) &&
+      !assistantTurnStillInProgress &&
+      !message.streaming;
+
+    return (
+      <AssistantMessageRow
+        bearerToken={bearerToken}
+        checkpoint={checkpointByAssistantMessageId.get(message.id) ?? null}
+        httpBaseUrl={httpBaseUrl}
+        message={message}
+        showMeta={showMeta}
+      />
+    );
+  }
 
   return (
-    <View className="overflow-hidden rounded-2xl border border-border bg-surface">
-      <View className="flex-row items-center gap-2 border-b border-separator px-4 py-3">
-        <AppIcon name="file" size={16} color={isDark ? "#a3a3a3" : "#525252"} />
-        <Text className="flex-1 text-xs font-bold uppercase tracking-[0.8px] text-muted">
-          Changed files ({files.length})
-        </Text>
-        <Text className="text-xs font-semibold text-success">+{additions}</Text>
-        <Text className="text-xs font-semibold text-danger">-{deletions}</Text>
-      </View>
-      <View className="px-2 py-1.5">
-        {visibleFiles.map((file, index) => {
-          const normalizedPath = file.path.replaceAll("\\", "/");
-          const lastSlash = normalizedPath.lastIndexOf("/");
-          const directory = lastSlash >= 0 ? normalizedPath.slice(0, lastSlash + 1) : "";
-          const name = lastSlash >= 0 ? normalizedPath.slice(lastSlash + 1) : normalizedPath;
-          return (
-            <View
-              key={file.path}
-              className={`flex-row items-center gap-2 rounded-xl px-2 py-2 ${
-                index > 0 ? "border-t border-separator" : ""
-              }`}
-            >
-              <AppIcon name="file" size={14} color={isDark ? "#737373" : "#737373"} />
-              <Text className="min-w-0 flex-1 text-xs text-muted" numberOfLines={1}>
-                {directory}
-                <Text className="font-semibold text-foreground">{name}</Text>
-              </Text>
-              <Text className="text-[11px] font-semibold text-success">+{file.additions}</Text>
-              <Text className="text-[11px] font-semibold text-danger">-{file.deletions}</Text>
-            </View>
-          );
-        })}
-      </View>
-      {files.length > 5 ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{ expanded }}
-          onPress={() => setExpanded((current) => !current)}
-          className="items-center border-t border-separator px-3 py-2.5"
-        >
-          <Text className="text-xs font-semibold text-muted">
-            {expanded ? "Show less" : `Show ${files.length - 5} more`}
-          </Text>
-        </Pressable>
-      ) : null}
-    </View>
+    <ThreadWorkLog
+      activities={entry.activities}
+      copiedRowId={copiedWorkRowId}
+      expandedRows={expandedWorkRows}
+      onCopyRow={onCopyWorkRow}
+      onToggleRow={onToggleWorkRow}
+    />
   );
 }
 
@@ -407,9 +471,9 @@ export function ThreadScreen() {
     updateModelSelection,
   } = useThread(environmentId, threadId);
   const [draft, setDraft] = useState("");
-  const [selectedAttachments, setSelectedAttachments] = useState<readonly SelectedImageAttachment[]>(
-    []
-  );
+  const [selectedAttachments, setSelectedAttachments] = useState<
+    readonly SelectedImageAttachment[]
+  >([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const draftRef = useRef("");
   const draftEditedRef = useRef(false);
@@ -418,7 +482,12 @@ export function ThreadScreen() {
   const [thinkingSelectorOpen, setThinkingSelectorOpen] = useState(false);
   const [selectedModel, setSelectedModel] = useState<ModelSelection | null>(null);
   const [modelError, setModelError] = useState<string | null>(null);
-  const [expandedWorkLogs, setExpandedWorkLogs] = useState<ReadonlySet<string>>(new Set());
+  const [expandedTurnIds, setExpandedTurnIds] = useState<ReadonlySet<TurnId>>(new Set());
+  const [expandedWorkGroups, setExpandedWorkGroups] = useState<Readonly<Record<string, boolean>>>(
+    {}
+  );
+  const [expandedWorkRows, setExpandedWorkRows] = useState<Readonly<Record<string, boolean>>>({});
+  const [copiedWorkRowId, setCopiedWorkRowId] = useState<string | null>(null);
   const [bottomChromeHeight, setBottomChromeHeight] = useState(() =>
     estimatedComposerChromeHeight(insets)
   );
@@ -426,10 +495,53 @@ export function ThreadScreen() {
   const theme = useChromeTheme();
   const scrollRef = useRef<Reanimated.ScrollView>(null);
   const stickToBottomRef = useRef(true);
+  const baseFeed = useMemo(() => {
+    if (!thread) return [];
+    return buildThreadFeed(thread, { loadedMessages: messages });
+  }, [messages, thread]);
+  const expandedWorkGroupIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const [groupId, expanded] of Object.entries(expandedWorkGroups)) {
+      if (expanded) ids.add(groupId);
+    }
+    return ids;
+  }, [expandedWorkGroups]);
   const feed = useMemo(
-    () => buildThreadFeed(messages, thread?.activities ?? [], thread?.checkpoints ?? []),
-    [messages, thread?.activities, thread?.checkpoints]
+    () =>
+      deriveThreadFeedPresentation(
+        baseFeed,
+        thread?.latestTurn ?? null,
+        expandedTurnIds,
+        expandedWorkGroupIds
+      ),
+    [baseFeed, expandedTurnIds, expandedWorkGroupIds, thread?.latestTurn]
   );
+  const terminalAssistantMessageIds = useMemo(() => {
+    const terminalIdsByTurn = new Map<TurnId, string>();
+    for (const entry of baseFeed) {
+      if (entry.type === "message" && entry.message.role === "assistant" && entry.message.turnId) {
+        terminalIdsByTurn.set(entry.message.turnId, entry.message.id);
+      }
+    }
+    return new Set(terminalIdsByTurn.values());
+  }, [baseFeed]);
+  const unsettledTurnId =
+    thread?.latestTurn &&
+    (thread.latestTurn.completedAt === null || thread.latestTurn.state === "running")
+      ? thread.latestTurn.turnId
+      : null;
+  const checkpointByAssistantMessageId = useMemo(() => {
+    const checkpoints = (thread?.checkpoints ?? []).filter(
+      (checkpoint) => checkpoint.status === "ready" && checkpoint.files.length > 0
+    );
+    const map = new Map<OrchestrationMessage["id"], OrchestrationCheckpointSummary>();
+    for (const checkpoint of checkpoints) {
+      if (checkpoint.assistantMessageId) {
+        map.set(checkpoint.assistantMessageId, checkpoint);
+      }
+    }
+    return map;
+  }, [thread?.checkpoints]);
   const busy = thread?.session?.status === "running" || thread?.session?.status === "starting";
   const live = connectionState === "ready";
   const canSend = Boolean(thread && (draft.trim() || selectedAttachments.length > 0));
@@ -602,13 +714,35 @@ export function ThreadScreen() {
     [effectiveModel, updateModelSelection]
   );
 
-  const toggleWorkLog = useCallback((id: string) => {
-    setExpandedWorkLogs((current) => {
+  const toggleTurnFold = useCallback((turnId: TurnId) => {
+    setExpandedTurnIds((current) => {
       const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
+      if (next.has(turnId)) next.delete(turnId);
+      else next.add(turnId);
       return next;
     });
+  }, []);
+
+  const toggleWorkGroup = useCallback((groupId: string) => {
+    setExpandedWorkGroups((current) => ({
+      ...current,
+      [groupId]: !(current[groupId] ?? false),
+    }));
+  }, []);
+
+  const toggleWorkRow = useCallback((rowId: string) => {
+    setExpandedWorkRows((current) => ({
+      ...current,
+      [rowId]: !(current[rowId] ?? false),
+    }));
+  }, []);
+
+  const copyWorkRow = useCallback((rowId: string, value: string) => {
+    void Clipboard.setStringAsync(value);
+    setCopiedWorkRowId(rowId);
+    setTimeout(() => {
+      setCopiedWorkRowId((current) => (current === rowId ? null : current));
+    }, 1200);
   }, []);
 
   const threadTitle = thread?.title ?? shell?.title ?? "Thread";
@@ -815,25 +949,23 @@ export function ThreadScreen() {
             </View>
           ) : null}
 
-          {feed.map((entry) =>
-            entry.type === "message" ? (
-              <MessageRow
-                key={entry.id}
-                bearerToken={bearerToken}
-                httpBaseUrl={httpBaseUrl}
-                message={entry.message}
-              />
-            ) : entry.type === "work-log" ? (
-              <WorkLogGroup
-                key={entry.id}
-                entry={entry}
-                expanded={expandedWorkLogs.has(entry.id)}
-                onToggle={() => toggleWorkLog(entry.id)}
-              />
-            ) : (
-              <ChangedFilesCard key={entry.id} entry={entry} />
-            )
-          )}
+          {feed.map((entry) => (
+            <FeedEntryRow
+              key={entry.id}
+              bearerToken={bearerToken}
+              checkpointByAssistantMessageId={checkpointByAssistantMessageId}
+              copiedWorkRowId={copiedWorkRowId}
+              entry={entry}
+              expandedWorkRows={expandedWorkRows}
+              httpBaseUrl={httpBaseUrl}
+              terminalAssistantMessageIds={terminalAssistantMessageIds}
+              unsettledTurnId={unsettledTurnId}
+              onCopyWorkRow={copyWorkRow}
+              onToggleTurnFold={toggleTurnFold}
+              onToggleWorkGroup={toggleWorkGroup}
+              onToggleWorkRow={toggleWorkRow}
+            />
+          ))}
         </KeyboardChatScrollView>
       </BlurScreenRoot>
       {effectiveModel ? (

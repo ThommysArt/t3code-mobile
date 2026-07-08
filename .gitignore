@@ -46,3 +46,5 @@ credentials/
 # Generated native folders
 /ios
 /android
+!/modules/**/ios
+!/modules/**/android

@@ -35,6 +35,13 @@ const config: ExpoConfig = {
   },
   plugins: [
     "expo-router",
+    [
+      "expo-notifications",
+      {
+        color: "#0ea5e9",
+        defaultChannel: "agent-events",
+      },
+    ],
     "expo-sqlite",
     "expo-secure-store",
     [
