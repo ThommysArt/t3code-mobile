@@ -23,7 +23,6 @@
     },
     "preview-android": {
       "extends": "preview",
-      "autoIncrement": true,
       "credentialsSource": "local"
     },
     "preview-ios-simulator": {
@@ -33,7 +32,6 @@
       }
     },
     "production": {
-      "autoIncrement": true,
       "node": "24.13.1",
       "pnpm": "10.24.0"
     }
