@@ -13,6 +13,7 @@
     "src/**/*.tsx",
     ".expo/types/**/*.ts",
     "expo-env.d.ts",
-    "uniwind-env.d.ts"
+    "uniwind-env.d.ts",
+    "src/css.d.ts"
   ]
 }
