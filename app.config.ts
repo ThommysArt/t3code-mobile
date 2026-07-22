@@ -74,6 +74,7 @@ const config: ExpoConfig = {
       },
     ],
     "./plugins/withAndroidCleartextTraffic.cjs",
+    "./plugins/withAndroidReleaseSigning.cjs",
   ],
   experiments: {
     typedRoutes: true,

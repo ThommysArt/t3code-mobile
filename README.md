@@ -67,14 +67,21 @@ workarounds.
 ## Run
 
 The repository expects Node `24.13.1` in the Node 24 release line and pnpm `10.24.0`.
+Local Android builds follow the same **prebuild + Gradle** path as Lyra (on disk under
+`android/`), not `eas build --local` (which stages under `/tmp` and often hits quota limits).
 
 ```sh
 pnpm install
-pnpm android
+pnpm prebuild          # first time, or after native config changes
+pnpm android           # expo run:android (debug dev client)
+# or:
+pnpm build:dev         # ./gradlew assembleDebug
+pnpm build:preview     # ./gradlew assembleRelease
+pnpm install:dev       # adb install debug APK
+pnpm install:preview   # adb install release APK
 ```
 
-This installs the Android development build, including the cleartext tailnet networking policy.
-After the first install, start Metro with:
+After installing a native build, start Metro with:
 
 ```sh
 pnpm dev
@@ -136,38 +143,48 @@ pnpm release:android "Describe the release"
 pnpm build:android
 ```
 
-### Local
+### Local (Gradle, Lyra-style)
 
-Local builds use `eas build --local` with the same profiles and `credentials.json` signing, but run
-on your machine (Android SDK + JDK required; iOS local builds need macOS + Xcode).
+Local Android packages use **Expo prebuild + Gradle in the project tree** (requires Android SDK +
+JDK). When `credentials.json` is present, release builds are signed with the same keystore as EAS
+preview. The generated `android/` folder stays gitignored.
 
 ```sh
-# Commit, push, then build the APK/AAB locally
+# Fast path (no commit/push)
+pnpm build:preview
+pnpm build:dev
+
+# Commit, push, then local Gradle release APK
 pnpm deploy:android:local "Describe the change"
 
-# Release flow with a local build
+# Release flow with a local Gradle build
 pnpm release:android:local "Describe the release"
 
-# Checks + local build only (no commit/push)
+# Checks + local build only
 pnpm build:android:local
 
-# Or pass flags through the deploy script
-pnpm deploy:android --local --build-only
-pnpm deploy:android --local --skip-push "WIP local package"
+# Force a clean native project, then build
+bash scripts/build-android-local.sh --preview --clean
+bash scripts/build-android-local.sh --dev --clean --install
+
+# Optional: multi-ABI fat APK (slower, more disk). Default is arm64-v8a only.
+ANDROID_ARCHS=armeabi-v7a,arm64-v8a,x86,x86_64 pnpm build:preview
 ```
 
-Equivalent EAS-only helpers:
+Cloud EAS remains the default for `pnpm deploy:android` / `pnpm release:android` (no `--local`).
+
+Optional true EAS-local (Docker/tmp-based; not recommended on this host):
 
 ```sh
-pnpm eas:build:preview:android:local
+pnpm eas:build:preview:android:eas-local
 pnpm eas:build:preview:ios:local
 pnpm eas:build:preview:ios:simulator:local
 ```
 
 The deploy script runs tests and typecheck first (unless `--skip-checks`), commits your changes,
 optionally creates the release tag after the feature commit, pushes `main` and the tag, publishes
-the GitHub release with generated notes, then starts an EAS `preview-android` build. Cloud builds
-use `--no-wait`; local builds block until the artifact is produced.
+the GitHub release with generated notes, then either submits an EAS `preview-android` cloud build
+(`--no-wait`) or runs the local Gradle release APK path when `--local` is set.
 
 GitHub Actions also runs CI on every push/PR and, when a `v*.*.*` tag is pushed, validates the
 tag and publishes the GitHub release. Add an `EXPO_TOKEN` repository secret to let the tag workflow

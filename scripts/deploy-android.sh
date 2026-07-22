@@ -26,16 +26,17 @@ Usage:
 Options:
   --release [VERSION]  Bump package.json version (patch if omitted), tag vX.Y.Z,
                        push, publish a GitHub release, and start a build.
-  --local              Run the EAS build on this machine instead of EAS cloud
-                       (uses credentials.json / local Android SDK + JDK).
+  --local              Build a release APK locally with Expo prebuild + Gradle
+                       (Lyra-style, on-disk; uses credentials.json when present).
+                       Cloud deploy (default) still uses EAS.
   --build-only         Skip commit/tag/push; only run checks and start a build.
   --skip-checks        Skip tests and typecheck.
   --skip-push          Commit/tag locally but do not push or create a GitHub release.
   -h, --help           Show this help.
 
 Environment:
-  EAS_PROFILE          Build profile (default: preview-android)
-  EAS_PLATFORM         Platform (default: android)
+  EAS_PROFILE          Cloud build profile (default: preview-android)
+  EAS_PLATFORM         Cloud platform (default: android)
 EOF
 }
 
@@ -226,23 +227,23 @@ start_build() {
   local version
   local -a build_args
   version="$(read_package_version)"
+
+  if [[ "$LOCAL_BUILD" -eq 1 ]]; then
+    echo "Starting local Gradle Android preview build (version: v${version})..."
+    echo "Uses expo prebuild + ./gradlew assembleRelease on disk (not eas build --local)."
+    bash "${ROOT_DIR}/scripts/build-android-local.sh" --preview
+    return
+  fi
+
+  # Cloud builds return immediately.
   build_args=(
     build
     --profile "$PROFILE"
     --platform "$PLATFORM"
     --non-interactive
+    --no-wait
   )
-
-  if [[ "$LOCAL_BUILD" -eq 1 ]]; then
-    build_args+=(--local)
-    echo "Starting local EAS ${PLATFORM} build (profile: ${PROFILE}, version: v${version})..."
-    echo "Requires a local Android SDK + JDK. Output APK/AAB will be written under the project."
-  else
-    # Cloud builds return immediately; local builds always block until finished.
-    build_args+=(--no-wait)
-    echo "Starting EAS cloud ${PLATFORM} build (profile: ${PROFILE}, version: v${version}, no-wait)..."
-  fi
-
+  echo "Starting EAS cloud ${PLATFORM} build (profile: ${PROFILE}, version: v${version}, no-wait)..."
   pnpm dlx eas-cli "${build_args[@]}"
 }
 
@@ -251,7 +252,7 @@ commit_and_push
 start_build
 
 if [[ "$LOCAL_BUILD" -eq 1 ]]; then
-  echo "Local build finished."
+  echo "Local Gradle build finished. APK under android/app/build/outputs/apk/release/"
 else
   echo "Deploy submitted. Track the build in the EAS dashboard or with: pnpm dlx eas-cli build:list"
 fi

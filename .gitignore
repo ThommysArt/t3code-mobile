@@ -48,3 +48,8 @@ credentials/
 /android
 !/modules/**/ios
 !/modules/**/android
+
+# Local native-module build outputs (keep module sources, ignore Gradle/CMake artifacts)
+modules/**/android/build/
+modules/**/android/.cxx/
+modules/**/ios/build/
