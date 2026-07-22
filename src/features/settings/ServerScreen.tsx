@@ -278,7 +278,7 @@ export function ServerScreen() {
             <View className="gap-2">
               <SettingsFieldLabel>Server or pairing URL</SettingsFieldLabel>
               {isLoadingDraft ? (
-                <ActivityIndicator style={{ paddingVertical: 10 }} color="#f97316" />
+                <ActivityIndicator style={{ paddingVertical: 10 }} color="#2563eb" />
               ) : (
                 <SettingsTextInput
                   value={serverUrl}

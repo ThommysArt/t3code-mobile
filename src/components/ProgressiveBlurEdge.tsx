@@ -23,17 +23,24 @@ function alpha(color: string, opacity: number): string {
 /**
  * Progressive fade overlay — same approach as tanap event cards:
  * a LinearGradient band that softens scrolling content behind chrome.
+ *
+ * - `layout="overlay"` (default): absolute-positioned band for screen chrome.
+ * - `layout="flow"`: in-flow height from children; gradient paints above/below
+ *   without capturing touches. Prefer this under keyboard-sticky containers so
+ *   the parent gets a real height and TextInput selection works.
  */
 export function ProgressiveBlurEdge({
   backgroundColor,
   children,
   edge,
   fadeHeight,
+  layout = "overlay",
   style,
 }: PropsWithChildren<{
   readonly backgroundColor: string;
   readonly edge: Edge;
   readonly fadeHeight: number;
+  readonly layout?: "overlay" | "flow";
   readonly style?: ViewStyle;
 }>) {
   const fadeColors =
@@ -49,13 +56,15 @@ export function ProgressiveBlurEdge({
           alpha(backgroundColor, 0.96),
         ] as const);
 
+  const isFlow = layout === "flow";
+
   return (
     <View
       pointerEvents="box-none"
       style={[
-        styles.edge,
-        edge === "top" ? styles.top : styles.bottom,
-        { minHeight: fadeHeight },
+        isFlow ? styles.flowEdge : styles.edge,
+        !isFlow && (edge === "top" ? styles.top : styles.bottom),
+        !isFlow ? { minHeight: fadeHeight } : null,
         style,
       ]}
     >
@@ -72,10 +81,7 @@ export function ProgressiveBlurEdge({
       />
       <View
         pointerEvents="box-none"
-        style={[
-          styles.content,
-          edge === "top" ? styles.topContent : styles.bottomContent,
-        ]}
+        style={[styles.content, edge === "top" ? styles.topContent : styles.bottomContent]}
       >
         {children}
       </View>
@@ -89,6 +95,10 @@ const styles = StyleSheet.create({
     position: "absolute",
     right: 0,
     zIndex: 20,
+  },
+  flowEdge: {
+    overflow: "visible",
+    width: "100%",
   },
   top: {
     top: 0,

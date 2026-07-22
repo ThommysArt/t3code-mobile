@@ -67,7 +67,7 @@ function WorkspaceToolCard(props: {
       className="flex-row items-center gap-4 rounded-2xl border border-border bg-surface px-4 py-4"
     >
       <View className="h-11 w-11 items-center justify-center rounded-2xl bg-default">
-        <AppIcon name={props.icon} size={22} color="#f97316" />
+        <AppIcon name={props.icon} size={22} color="#2563eb" />
       </View>
       <View className="min-w-0 flex-1">
         <Text className="text-base font-semibold text-foreground">{props.title}</Text>

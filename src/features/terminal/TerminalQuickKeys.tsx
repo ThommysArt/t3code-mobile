@@ -129,7 +129,7 @@ export const TerminalQuickKeys = memo(function TerminalQuickKeys(props: {
               }}
               className="rounded-full px-3 py-1.5"
               style={{
-                backgroundColor: active ? "#f97316" : theme.surface,
+                backgroundColor: active ? "#2563eb" : theme.surface,
                 borderColor: theme.border,
                 borderWidth: 1,
                 marginRight: index < actions.length - 1 ? 6 : 0,

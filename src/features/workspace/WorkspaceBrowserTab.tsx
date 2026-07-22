@@ -113,7 +113,7 @@ export const WorkspaceBrowserTab = memo(function WorkspaceBrowserTab(props: {
               {activeUrl}
             </Text>
           </View>
-          {pageLoading ? <ActivityIndicator color="#f97316" size="small" /> : null}
+          {pageLoading ? <ActivityIndicator color="#2563eb" size="small" /> : null}
           <Pressable
             accessibilityLabel="Refresh page"
             accessibilityRole="button"
@@ -167,7 +167,7 @@ export const WorkspaceBrowserTab = memo(function WorkspaceBrowserTab(props: {
       <ScrollView className="flex-1" contentContainerStyle={{ padding: 16, gap: 12 }}>
         {discovered.servers.length === 0 ? (
           <View className="items-center gap-2 py-8">
-            <ActivityIndicator color="#f97316" />
+            <ActivityIndicator color="#2563eb" />
             <Text className="text-center text-sm text-muted">
               Scanning for localhost dev servers on your machine…
             </Text>
@@ -200,7 +200,7 @@ export const WorkspaceBrowserTab = memo(function WorkspaceBrowserTab(props: {
                       </Text>
                     ) : null}
                   </View>
-                  <AppIcon name="globe" size={18} color="#f97316" />
+                  <AppIcon name="globe" size={18} color="#2563eb" />
                 </View>
               </Pressable>
             );

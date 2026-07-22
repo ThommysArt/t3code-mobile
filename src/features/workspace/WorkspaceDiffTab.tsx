@@ -190,7 +190,7 @@ export const WorkspaceDiffTab = memo(function WorkspaceDiffTab(props: {
 
       {activePending ? (
         <View className="items-center py-6">
-          <ActivityIndicator color="#f97316" />
+          <ActivityIndicator color="#2563eb" />
         </View>
       ) : null}
 

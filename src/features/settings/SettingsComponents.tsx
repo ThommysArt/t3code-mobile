@@ -346,7 +346,7 @@ export function SettingsPickerButton(props: {
 export function SettingsLoadingRow(props: { readonly label: string }) {
   return (
     <View className="flex-row items-center gap-3 px-4 py-4">
-      <ActivityIndicator color="#f97316" />
+      <ActivityIndicator color="#2563eb" />
       <Text className="text-sm text-muted">{props.label}</Text>
     </View>
   );

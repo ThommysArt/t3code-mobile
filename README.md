@@ -123,17 +123,51 @@ full-history fallback.
 Version numbers live in `package.json` and flow into `app.config.ts`. Releases use annotated
 semver tags (`v0.0.6`) and publish GitHub releases titled `T3 Code Mobile vX.Y.Z`.
 
+### Cloud (EAS)
+
 ```sh
-# Commit, push, and start a preview Android EAS build
+# Commit, push, and start a preview Android EAS cloud build
 pnpm deploy:android "Describe the change"
 
-# Patch bump, tag, GitHub release, push, and EAS build
+# Patch bump, tag, GitHub release, push, and EAS cloud build
 pnpm release:android "Describe the release"
+
+# Checks + build only (no commit/push)
+pnpm build:android
 ```
 
-The deploy script runs tests and typecheck first, commits your changes, creates the release tag
-after the feature commit, pushes `main` and the tag, publishes the GitHub release with generated
-notes, then submits a non-blocking EAS `preview-android` build.
+### Local
+
+Local builds use `eas build --local` with the same profiles and `credentials.json` signing, but run
+on your machine (Android SDK + JDK required; iOS local builds need macOS + Xcode).
+
+```sh
+# Commit, push, then build the APK/AAB locally
+pnpm deploy:android:local "Describe the change"
+
+# Release flow with a local build
+pnpm release:android:local "Describe the release"
+
+# Checks + local build only (no commit/push)
+pnpm build:android:local
+
+# Or pass flags through the deploy script
+pnpm deploy:android --local --build-only
+pnpm deploy:android --local --skip-push "WIP local package"
+```
+
+Equivalent EAS-only helpers:
+
+```sh
+pnpm eas:build:preview:android:local
+pnpm eas:build:preview:ios:local
+pnpm eas:build:preview:ios:simulator:local
+```
+
+The deploy script runs tests and typecheck first (unless `--skip-checks`), commits your changes,
+optionally creates the release tag after the feature commit, pushes `main` and the tag, publishes
+the GitHub release with generated notes, then starts an EAS `preview-android` build. Cloud builds
+use `--no-wait`; local builds block until the artifact is produced.
 
 GitHub Actions also runs CI on every push/PR and, when a `v*.*.*` tag is pushed, validates the
 tag and publishes the GitHub release. Add an `EXPO_TOKEN` repository secret to let the tag workflow

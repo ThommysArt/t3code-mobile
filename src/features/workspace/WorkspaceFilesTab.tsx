@@ -443,7 +443,7 @@ export const WorkspaceFilesTab = memo(function WorkspaceFilesTab(props: {
       >
         {listPending && listedEntries.length === 0 ? (
           <View className="items-center py-8">
-            <ActivityIndicator color="#f97316" />
+            <ActivityIndicator color="#2563eb" />
           </View>
         ) : null}
 
@@ -503,7 +503,7 @@ export const WorkspaceFilesTab = memo(function WorkspaceFilesTab(props: {
             </Text>
           </View>
           <View style={{ flex: 1, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 8 }}>
-            {previewPending ? <ActivityIndicator color="#f97316" /> : null}
+            {previewPending ? <ActivityIndicator color="#2563eb" /> : null}
             {previewError ? <Text className="text-xs text-red-400">{previewError}</Text> : null}
             {previewTruncated ? (
               <Text className="mb-2 text-xs text-muted">Preview truncated for large files.</Text>

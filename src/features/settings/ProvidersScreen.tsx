@@ -62,13 +62,13 @@ function ProvidersStatusStrip(props: {
     }
     if (props.isRefreshingProviders) {
       return {
-        color: isDark ? "#fb923c" : "#ea580c",
+        color: isDark ? "#60a5fa" : "#2563eb",
         label: "Refreshing provider status",
       };
     }
     if (props.isLoadingSettings) {
       return {
-        color: isDark ? "#fb923c" : "#ea580c",
+        color: isDark ? "#60a5fa" : "#2563eb",
         label: "Loading provider settings",
       };
     }
@@ -258,12 +258,12 @@ export function ProvidersScreen() {
 
   const headerStatus = isRefreshingProviders ? (
     <View className="flex-row items-center gap-1.5">
-      <ActivityIndicator size="small" color="#f97316" />
+      <ActivityIndicator size="small" color="#2563eb" />
       <Text className="text-[11px] text-muted">Refreshing…</Text>
     </View>
   ) : isLoading ? (
     <View className="flex-row items-center gap-1.5">
-      <ActivityIndicator size="small" color="#f97316" />
+      <ActivityIndicator size="small" color="#2563eb" />
       <Text className="text-[11px] text-muted">Loading…</Text>
     </View>
   ) : lastCheckedAt ? (
@@ -282,7 +282,7 @@ export function ProvidersScreen() {
         variant="icon"
       >
         {isRefreshingProviders ? (
-          <ActivityIndicator size="small" color="#f97316" />
+          <ActivityIndicator size="small" color="#2563eb" />
         ) : (
           <AppIcon name="refresh" size={19} color={theme.foreground} />
         )}

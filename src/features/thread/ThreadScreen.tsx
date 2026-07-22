@@ -108,7 +108,7 @@ function MessageAttachment({
           />
           {loading ? (
             <View className="absolute inset-0 items-center justify-center">
-              <ActivityIndicator color="#f97316" />
+              <ActivityIndicator color="#2563eb" />
             </View>
           ) : null}
         </>
@@ -819,9 +819,12 @@ export function ThreadScreen() {
                   setDraft(value);
                 }}
                 multiline
+                scrollEnabled
                 placeholder={busy ? "Queue a follow-up..." : "Ask for follow-up changes..."}
                 placeholderTextColor={isDark ? "#737373" : "#9a9a9a"}
-                className="max-h-24 min-h-14 text-[14px] leading-5 text-foreground"
+                selectionColor={isDark ? "#60a5fa" : "#2563eb"}
+                className="max-h-24 min-h-14 w-full text-[14px] leading-5 text-foreground"
+                style={{ width: "100%" }}
                 textAlignVertical="top"
               />
               <View className="mt-2 flex-row items-center">
@@ -944,7 +947,7 @@ export function ThreadScreen() {
 
           {isPending && !thread ? (
             <View className="items-center gap-3 py-12">
-              <ActivityIndicator color="#f97316" />
+              <ActivityIndicator color="#2563eb" />
               <Text className="text-sm text-muted">Loading thread history</Text>
             </View>
           ) : null}

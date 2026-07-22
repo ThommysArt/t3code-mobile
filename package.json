@@ -18,11 +18,19 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "eas:build:preview": "pnpm dlx eas-cli build --profile preview --platform all",
+    "eas:build:preview:local": "pnpm dlx eas-cli build --profile preview --platform all --local",
     "deploy:android": "bash scripts/deploy-android.sh",
+    "deploy:android:local": "bash scripts/deploy-android.sh --local",
     "release:android": "bash scripts/deploy-android.sh --release",
+    "release:android:local": "bash scripts/deploy-android.sh --release --local",
+    "build:android": "bash scripts/deploy-android.sh --build-only",
+    "build:android:local": "bash scripts/deploy-android.sh --build-only --local",
     "eas:build:preview:android": "pnpm dlx eas-cli build --profile preview-android --platform android",
+    "eas:build:preview:android:local": "pnpm dlx eas-cli build --profile preview-android --platform android --local",
     "eas:build:preview:ios": "pnpm dlx eas-cli build --profile preview --platform ios",
-    "eas:build:preview:ios:simulator": "pnpm dlx eas-cli build --profile preview-ios-simulator --platform ios"
+    "eas:build:preview:ios:local": "pnpm dlx eas-cli build --profile preview --platform ios --local",
+    "eas:build:preview:ios:simulator": "pnpm dlx eas-cli build --profile preview-ios-simulator --platform ios",
+    "eas:build:preview:ios:simulator:local": "pnpm dlx eas-cli build --profile preview-ios-simulator --platform ios --local"
   },
   "dependencies": {
     "@effect/atom-react": "4.0.0-beta.78",

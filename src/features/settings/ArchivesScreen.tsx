@@ -135,7 +135,7 @@ export function ArchivesScreen() {
                 variant="icon"
               >
                 {isLoading ? (
-                  <ActivityIndicator size="small" color="#f97316" />
+                  <ActivityIndicator size="small" color="#2563eb" />
                 ) : (
                   <AppIcon name="refresh" size={19} color={theme.foreground} />
                 )}

@@ -512,13 +512,19 @@ export function NewThreadScreen() {
         <TextInput
           autoFocus
           multiline
+          scrollEnabled
           value={prompt}
           onChangeText={setPrompt}
           placeholder={`Describe a coding task in ${project.title}`}
           placeholderTextColor={isDark ? "#737373" : "#9a9a9a"}
+          selectionColor={isDark ? "#60a5fa" : "#2563eb"}
           textAlignVertical="top"
           className="flex-1 px-4 py-4 text-[14px] leading-5 text-foreground"
-          style={{ paddingBottom: bottomChromeHeight + 12, paddingTop: headerHeight + 4 }}
+          style={{
+            paddingBottom: bottomChromeHeight + 12,
+            paddingTop: headerHeight + 4,
+            width: "100%",
+          }}
         />
       </BlurScreenRoot>
 

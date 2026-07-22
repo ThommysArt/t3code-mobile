@@ -40,7 +40,7 @@ export function fileIconKindForName(name: string, kind: "file" | "directory"): F
 }
 
 const ICON_COLORS: Record<FileIconKind, string> = {
-  folder: "#f97316",
+  folder: "#2563eb",
   file: "#a3a3a3",
   typescript: "#3178c6",
   javascript: "#f7df1e",

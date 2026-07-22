@@ -333,7 +333,7 @@ export const WorkspaceTerminalTab = memo(function WorkspaceTerminalTab(props: {
         </View>
         <View className="flex-row items-center gap-2">
           {terminal.status === "starting" ? (
-            <ActivityIndicator color="#f97316" size="small" />
+            <ActivityIndicator color="#2563eb" size="small" />
           ) : null}
           {terminal.error ? (
             <Text className="max-w-40 text-right text-[11px] text-red-400" numberOfLines={1}>

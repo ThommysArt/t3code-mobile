@@ -70,8 +70,8 @@ function statusTone(
     case "running":
       return {
         label: "Running",
-        backgroundColor: isDark ? "#3b210f" : "#ffedd5",
-        foregroundColor: isDark ? "#fb923c" : "#c2410c",
+        backgroundColor: isDark ? "#172554" : "#dbeafe",
+        foregroundColor: isDark ? "#60a5fa" : "#1d4ed8",
       };
     case "starting":
       return {
@@ -112,7 +112,7 @@ function ThreadRow(props: {
   const separator = props.isDark ? "#282828" : "#dedede";
   const iconColor =
     props.thread.session?.status === "running" || props.thread.session?.status === "starting"
-      ? "#f97316"
+      ? "#2563eb"
       : props.isDark
         ? "#a3a3a3"
         : "#737373";
@@ -427,7 +427,7 @@ export function HomeScreen() {
           ) : null}
           {isBootstrapping ? (
             <View className="items-center gap-3 rounded-3xl border border-border bg-surface px-5 py-10">
-              <ActivityIndicator color="#f97316" />
+              <ActivityIndicator color="#2563eb" />
               <Text className="text-sm text-muted">Restoring environments and cached threads</Text>
             </View>
           ) : environments.length === 0 ? (
