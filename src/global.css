@@ -8,6 +8,46 @@
 
 @theme inline {
   --color-primary: var(--primary);
+  --font-sans: "Geist_400Regular", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* Map Tailwind weight utilities to the matching Geist face (needed on Android). */
+@utility font-thin {
+  font-family: Geist_100Thin;
+  font-weight: 100;
+}
+@utility font-extralight {
+  font-family: Geist_200ExtraLight;
+  font-weight: 200;
+}
+@utility font-light {
+  font-family: Geist_300Light;
+  font-weight: 300;
+}
+@utility font-normal {
+  font-family: Geist_400Regular;
+  font-weight: 400;
+}
+@utility font-medium {
+  font-family: Geist_500Medium;
+  font-weight: 500;
+}
+@utility font-semibold {
+  font-family: Geist_600SemiBold;
+  font-weight: 600;
+}
+@utility font-bold {
+  font-family: Geist_700Bold;
+  font-weight: 700;
+}
+@utility font-extrabold {
+  font-family: Geist_800ExtraBold;
+  font-weight: 800;
+}
+@utility font-black {
+  font-family: Geist_900Black;
+  font-weight: 900;
 }
 
 @layer theme {

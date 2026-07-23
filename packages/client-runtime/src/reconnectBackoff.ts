@@ -15,13 +15,30 @@ export interface ReconnectBackoffConfig {
 /**
  * Sensible defaults for WebSocket reconnect backoff.
  *
- * - 1 s initial delay, doubling each retry, capped at 64 s, up to 7 retries.
+ * Mobile clients lose sockets frequently (app backgrounding, Tailscale blips,
+ * OS "software caused connection abort"). Match the upstream supervisor model
+ * and keep retrying with a bounded delay instead of giving up after a few
+ * attempts.
+ *
+ * - 1 s initial delay, doubling each retry, capped at 30 s, unlimited retries.
  */
 export const DEFAULT_RECONNECT_BACKOFF: ReconnectBackoffConfig = {
   initialDelayMs: 1_000,
   backoffFactor: 2,
-  maxDelayMs: 64_000,
-  maxRetries: 7,
+  maxDelayMs: 30_000,
+  maxRetries: null,
+};
+
+/**
+ * App-layer recovery backoff used when a live session drops and needs a full
+ * transport re-establish (fresh WS ticket). Slightly more aggressive than the
+ * socket-protocol defaults so the UI recovers quickly after a blip.
+ */
+export const APP_RECONNECT_BACKOFF: ReconnectBackoffConfig = {
+  initialDelayMs: 750,
+  backoffFactor: 2,
+  maxDelayMs: 20_000,
+  maxRetries: null,
 };
 
 /**

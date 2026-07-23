@@ -139,8 +139,11 @@ function ThreadRow(props: {
             justifyContent: "center",
             borderRadius: 10,
             backgroundColor:
-              props.thread.session?.status === "running"
-                ? "#362012"
+              props.thread.session?.status === "running" ||
+              props.thread.session?.status === "starting"
+                ? props.isDark
+                  ? "#172554"
+                  : "#dbeafe"
                 : props.isDark
                   ? "#242424"
                   : "#eeeeef",

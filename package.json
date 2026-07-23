@@ -7,6 +7,7 @@
     "dev": "bash scripts/check-dev-environment.sh && expo start --clear",
     "dev:unsafe": "expo start --clear",
     "fix:inotify": "bash scripts/increase-inotify-limit.sh",
+    "clean:metro": "rm -rf /tmp/metro-file-map-* /tmp/metro-cache /tmp/haste-map-* .expo/metro .expo/web node_modules/.cache && echo 'Metro caches cleared. Restart with: pnpm dev'",
     "start": "bash scripts/check-dev-environment.sh && expo start",
     "prebuild": "CI=1 EXPO_NO_GIT_STATUS=1 expo prebuild --platform android",
     "prebuild:clean": "CI=1 EXPO_NO_GIT_STATUS=1 expo prebuild --clean --platform android",
@@ -41,6 +42,7 @@
   },
   "dependencies": {
     "@effect/atom-react": "4.0.0-beta.78",
+    "@expo-google-fonts/geist": "^0.4.2",
     "@expo/metro-runtime": "~57.0.3",
     "@gorhom/bottom-sheet": "^5.2.14",
     "@t3tools/client-runtime": "workspace:*",
@@ -54,6 +56,7 @@
     "expo-constants": "~57.0.3",
     "expo-crypto": "~57.0.0",
     "expo-dev-client": "~57.0.5",
+    "expo-font": "~57.0.1",
     "expo-image": "~57.0.0",
     "expo-image-picker": "~57.0.2",
     "expo-linear-gradient": "~57.0.0",

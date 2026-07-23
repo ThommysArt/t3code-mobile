@@ -1,4 +1,5 @@
 import {
+  APP_RECONNECT_BACKOFF,
   applyShellStreamEvent,
   countActiveThreads,
   createEnvironmentConnection,
@@ -8,6 +9,9 @@ import {
   fetchRemoteEnvironmentDescriptor,
   fetchRemoteOrchestrationSnapshot,
   fetchRemoteSessionState,
+  formatTransportCloseMessage,
+  getReconnectDelayMs,
+  isTransportConnectionErrorMessage,
   resolveRemoteWebSocketConnectionUrl,
   toShellSnapshot,
   WsTransport,
@@ -69,6 +73,11 @@ const CONNECTION_PROBE_TIMEOUT_MS = 8_000;
 const WS_BOOTSTRAP_TIMEOUT_MS = 12_000;
 const HTTP_POLL_INTERVAL_MS = 2_500;
 const HTTP_POLL_MAX_DURATION_MS = 5 * 60_000;
+/** Wait briefly for Effect protocol auto-retry before forcing a full reconnect. */
+const LIVE_RECOVERY_GRACE_MS = 3_500;
+/** Heartbeat watchdog: reconnect when the live socket goes silent. */
+const HEARTBEAT_WATCHDOG_MS = 20_000;
+const HEARTBEAT_STALE_MS = 20_000;
 
 export type EnvironmentConnectionState = "connecting" | "ready" | "reconnecting" | "disconnected";
 export type EnvironmentDataSource = "live" | "http" | "cache" | "none";
@@ -136,9 +145,29 @@ function isAuthFailure(error: unknown): boolean {
 
 function unreachableEnvironmentMessage(connection: SavedConnection, error: unknown): string {
   const detail = formatRemoteError(error);
+  if (isTransportConnectionErrorMessage(detail)) {
+    return `Could not reach ${connection.label}. Check Tailscale or the local network and try again.`;
+  }
   const host = new URL(connection.httpBaseUrl).hostname;
   if (!shouldUseHttpForHost(host)) return detail;
   return `This phone could not reach ${connection.httpBaseUrl} over Tailscale or the local network. Confirm Tailscale is connected on the phone and use a development build for plain HTTP servers.`;
+}
+
+function userFacingConnectionError(error: unknown, fallback: string): string {
+  const message = errorMessage(error, fallback);
+  if (isTransportConnectionErrorMessage(message)) {
+    return "Live connection interrupted. Reconnecting…";
+  }
+  return message;
+}
+
+function isPermanentConnectionError(message: string | null | undefined): boolean {
+  if (!message) return false;
+  return (
+    /no longer valid/i.test(message) ||
+    /pair this server again/i.test(message) ||
+    /re-pair required/i.test(message)
+  );
 }
 
 function hasRunningThread(readModel: OrchestrationReadModel): boolean {
@@ -189,14 +218,89 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
   const environmentByIdRef = useRef<Readonly<Record<string, EnvironmentViewState>>>({});
   const httpPollTimersRef = useRef(new Map<EnvironmentId, ReturnType<typeof setTimeout>>());
   const httpPollDeadlinesRef = useRef(new Map<EnvironmentId, number>());
+  const recoveryTimersRef = useRef(new Map<EnvironmentId, ReturnType<typeof setTimeout>>());
+  const recoveryAttemptsRef = useRef(new Map<EnvironmentId, number>());
   const terminalMetadataUnsubscribersRef = useRef(new Map<EnvironmentId, () => void>());
   const mountedRef = useRef(true);
+  const connectSavedRef = useRef<(connection: SavedConnection) => Promise<void>>(async () => undefined);
 
   const clearTerminalMetadataSubscription = useCallback((environmentId: EnvironmentId) => {
     terminalMetadataUnsubscribersRef.current.get(environmentId)?.();
     terminalMetadataUnsubscribersRef.current.delete(environmentId);
     terminalSessionManager.invalidateEnvironment(environmentId);
   }, []);
+
+  const clearLiveRecovery = useCallback((environmentId: EnvironmentId) => {
+    const timer = recoveryTimersRef.current.get(environmentId);
+    if (timer) clearTimeout(timer);
+    recoveryTimersRef.current.delete(environmentId);
+    recoveryAttemptsRef.current.delete(environmentId);
+  }, []);
+
+  const scheduleLiveRecovery = useCallback(
+    (
+      savedConnection: SavedConnection,
+      options?: { readonly immediate?: boolean; readonly graceMs?: number }
+    ) => {
+      const environmentId = savedConnection.environmentId;
+      const existingTimer = recoveryTimersRef.current.get(environmentId);
+      if (existingTimer) clearTimeout(existingTimer);
+
+      const attempt = recoveryAttemptsRef.current.get(environmentId) ?? 0;
+      const delayMs = options?.immediate
+        ? 0
+        : options?.graceMs !== undefined
+          ? options.graceMs
+          : (getReconnectDelayMs(attempt, APP_RECONNECT_BACKOFF) ??
+            APP_RECONNECT_BACKOFF.maxDelayMs);
+
+      const timer = setTimeout(() => {
+        recoveryTimersRef.current.delete(environmentId);
+        if (!mountedRef.current) return;
+
+        const environment = environmentByIdRef.current[environmentId];
+        if (!environment) return;
+        if (environment.connectionState === "ready" && environment.dataSource === "live") {
+          recoveryAttemptsRef.current.delete(environmentId);
+          return;
+        }
+
+        // Soft protocol retry did not restore live shell in time — force a full
+        // reconnect with a fresh WS ticket. connectSaved cancels any prior attempt.
+        recoveryAttemptsRef.current.set(environmentId, attempt + 1);
+        logStatus(
+          "environment",
+          "info",
+          "Auto-reconnecting",
+          `${savedConnection.label} (attempt ${attempt + 1})`,
+          {
+            environmentId,
+            phase: "reconnecting",
+            inProgress: true,
+            toast: false,
+          }
+        );
+        void connectSavedRef.current(savedConnection).finally(() => {
+          if (!mountedRef.current) return;
+          const next = environmentByIdRef.current[environmentId];
+          if (!next || (next.connectionState === "ready" && next.dataSource === "live")) {
+            recoveryAttemptsRef.current.delete(environmentId);
+            return;
+          }
+          // Auth/pairing failures need a human — do not spin forever.
+          if (isPermanentConnectionError(next.error)) {
+            recoveryAttemptsRef.current.delete(environmentId);
+            return;
+          }
+          // Still not live — keep trying with exponential backoff.
+          scheduleLiveRecovery(savedConnection);
+        });
+      }, delayMs);
+
+      recoveryTimersRef.current.set(environmentId, timer);
+    },
+    []
+  );
 
   const updateEnvironment = useCallback(
     (
@@ -372,6 +476,12 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
       const savedConnection = normalizeSavedConnection(savedConnectionInput);
       const environmentId = savedConnection.environmentId;
       stopHttpPolling(environmentId);
+      // Cancel any pending delayed recovery so we don't double-connect.
+      const pendingRecovery = recoveryTimersRef.current.get(environmentId);
+      if (pendingRecovery) {
+        clearTimeout(pendingRecovery);
+        recoveryTimersRef.current.delete(environmentId);
+      }
 
       const attemptId = Symbol(environmentId);
       connectionAttemptsRef.current.set(environmentId, attemptId);
@@ -442,7 +552,8 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
         });
       } catch (error) {
         if (!isCurrentAttempt()) return;
-        const message = isAuthFailure(error)
+        const authFailed = isAuthFailure(error);
+        const message = authFailed
           ? "The saved session is no longer valid. Enter a new pairing code and pair this server again."
           : unreachableEnvironmentMessage(savedConnection, error);
         updateEnvironment(environmentId, (current) => ({
@@ -456,7 +567,7 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
         logStatus(
           "environment",
           "warning",
-          isAuthFailure(error) ? "Re-pair required" : "Server unreachable",
+          authFailed ? "Re-pair required" : "Server unreachable",
           message,
           {
             environmentId,
@@ -465,6 +576,12 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
             inProgress: false,
           }
         );
+        if (authFailed) {
+          // Pairing is required — do not spin reconnect forever.
+          clearLiveRecovery(environmentId);
+        } else {
+          scheduleLiveRecovery(savedConnection);
+        }
         return;
       }
 
@@ -484,6 +601,10 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
             updateEnvironment(environmentId, (current) => ({
               ...current,
               connectionStep: "opening-websocket",
+              connectionState:
+                current.connectionState === "ready" || current.connectionState === "reconnecting"
+                  ? "reconnecting"
+                  : current.connectionState,
             }));
             logStatus("environment", "info", "Opening WebSocket", savedConnection.label, {
               environmentId,
@@ -492,9 +613,17 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
           },
           onOpen: () => {
             if (!isCurrentAttempt()) return;
+            // Protocol recovered (or first open). Stay in reconnecting until shell snapshot
+            // arrives, but clear sticky close banners so the UI stops yelling.
             updateEnvironment(environmentId, (current) => ({
               ...current,
               connectionStep: "syncing-threads",
+              connectionState:
+                current.connectionState === "disconnected" ||
+                current.connectionState === "reconnecting"
+                  ? "reconnecting"
+                  : current.connectionState,
+              error: null,
             }));
             logStatus("environment", "info", "WebSocket opened", savedConnection.label, {
               environmentId,
@@ -503,37 +632,55 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
           },
           onError: (message) => {
             if (!isCurrentAttempt()) return;
-            logStatus("environment", "warning", "WebSocket error", message, {
+            const detail = isTransportConnectionErrorMessage(message)
+              ? "Live connection interrupted. Reconnecting…"
+              : message;
+            logStatus("environment", "warning", "WebSocket error", detail, {
               environmentId,
               toast: false,
             });
           },
           onClose: ({ code, reason }, { intentional }) => {
             if (intentional || !isCurrentAttempt()) return;
-            const detail = reason.trim() || `Connection closed (${code}).`;
+            const detail =
+              formatTransportCloseMessage({ code, reason, intentional }) ??
+              "Live connection interrupted. Reconnecting…";
+            // Keep the session alive so Effect's socket retry + stream resubscribe can recover
+            // without tearing down thread subscriptions. Only mark reconnecting — not offline.
             updateEnvironment(environmentId, (current) => ({
               ...current,
-              connectionState: "disconnected",
-              connectionStep: "offline",
+              connectionState: "reconnecting",
+              connectionStep: "opening-websocket",
               error: detail,
-              dataSource: current.snapshot ? current.dataSource : "none",
-              sessionRevision: current.sessionRevision + 1,
+              // Prefer HTTP/cache data over claiming "none" while we recover.
+              dataSource:
+                current.dataSource === "live"
+                  ? current.snapshot
+                    ? "http"
+                    : "none"
+                  : current.dataSource,
             }));
             logStatus("environment", "warning", "Live connection lost", detail, {
               environmentId,
-              persistent: true,
-              phase: "disconnected",
-              inProgress: false,
+              phase: "reconnecting",
+              inProgress: true,
+              toast: false,
             });
             void syncHttpSnapshot(savedConnection, {
               quiet: true,
               reason: "WebSocket disconnected",
             }).catch(() => undefined);
+            // Give Effect's socket retry a short grace period, then force a full reconnect
+            // with a fresh WS ticket if live shell has not returned.
+            scheduleLiveRecovery(savedConnection, { graceMs: LIVE_RECOVERY_GRACE_MS });
           },
         },
         {
           logWarning: (message, metadata) => {
-            logStatus("environment", "warning", message, metadata.error, {
+            const detail = isTransportConnectionErrorMessage(metadata.error)
+              ? "Live connection interrupted. Reconnecting…"
+              : metadata.error;
+            logStatus("environment", "warning", message, detail, {
               environmentId,
               toast: false,
             });
@@ -592,6 +739,7 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
             }
           );
           void saveCachedShellSnapshot(eventEnvironmentId, snapshot);
+          clearLiveRecovery(eventEnvironmentId);
           updateEnvironment(eventEnvironmentId, (current) => ({
             ...current,
             snapshot,
@@ -626,11 +774,20 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
         },
         onShellResubscribe: (eventEnvironmentId) => {
           if (sessionsRef.current.get(eventEnvironmentId) !== sessionEntry) return;
-          updateEnvironment(eventEnvironmentId, (current) => ({
-            ...current,
-            connectionState: current.snapshot ? "ready" : "reconnecting",
+          const current = environmentByIdRef.current[eventEnvironmentId];
+          if (current?.snapshot) {
+            // Soft recovery succeeded — cancel the full reconnect timer.
+            clearLiveRecovery(eventEnvironmentId);
+          }
+          updateEnvironment(eventEnvironmentId, (env) => ({
+            ...env,
+            // Keep existing live data usable while the stream rehydrates. Do not bump
+            // sessionRevision here — that would tear down thread subscriptions mid-recover.
+            connectionState: env.snapshot ? "ready" : "reconnecting",
             connectionStep: "syncing-threads",
-            sessionRevision: current.sessionRevision + 1,
+            error:
+              env.error && isTransportConnectionErrorMessage(env.error) ? null : env.error,
+            dataSource: env.snapshot ? "live" : env.dataSource,
           }));
           logStatus("shell", "info", "Refreshing live thread stream", savedConnection.label, {
             environmentId: eventEnvironmentId,
@@ -649,6 +806,7 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
       try {
         await withTimeout(environmentConnection.ensureBootstrapped(), WS_BOOTSTRAP_TIMEOUT_MS);
         if (!isCurrentAttempt()) return;
+        clearLiveRecovery(environmentId);
         updateEnvironment(environmentId, (current) => ({
           ...current,
           connectionState: "ready",
@@ -691,7 +849,10 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
           });
           return null;
         });
-        const message = errorMessage(error, "Failed to connect to the live thread stream.");
+        const message = userFacingConnectionError(
+          error,
+          "Failed to connect to the live thread stream."
+        );
         updateEnvironment(environmentId, (current) => ({
           ...current,
           connectionState: "disconnected",
@@ -714,10 +875,22 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
             inProgress: false,
           }
         );
+        // Bootstrap failed after dispose — keep retrying in the background.
+        scheduleLiveRecovery(savedConnection);
       }
     },
-    [clearTerminalMetadataSubscription, stopHttpPolling, syncHttpSnapshot, updateEnvironment]
+    [
+      clearLiveRecovery,
+      clearTerminalMetadataSubscription,
+      scheduleLiveRecovery,
+      stopHttpPolling,
+      syncHttpSnapshot,
+      updateEnvironment,
+    ]
   );
+
+  // Keep the recovery scheduler pointing at the latest connectSaved.
+  connectSavedRef.current = connectSaved;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -783,39 +956,70 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
 
       for (const savedConnection of savedConnectionsRef.current) {
         const environment = environmentByIdRef.current[savedConnection.environmentId];
-        if (
-          environment?.connectionState === "connecting" ||
-          environment?.connectionState === "reconnecting"
-        ) {
+        if (environment?.connectionState === "connecting") {
           continue;
         }
         const session = sessions.get(savedConnection.environmentId);
-        const lastSyncedAt = environment?.lastSyncedAt
-          ? Date.parse(environment.lastSyncedAt)
-          : Number.NEGATIVE_INFINITY;
-        const recentlySynced = Date.now() - lastSyncedAt < 15_000;
+        const heartbeatFresh = session?.client.isHeartbeatFresh(HEARTBEAT_STALE_MS) ?? false;
+        // Re-establish after backgrounding when not fully live. Mobile OS routinely
+        // aborts idle sockets ("software caused connection abort") while suspended.
+        // Do not use lastSyncedAt alone — idle shells can be healthy for minutes.
         if (
           environment?.connectionState === "disconnected" ||
-          (!recentlySynced && !session?.client.isHeartbeatFresh())
+          environment?.connectionState === "reconnecting" ||
+          environment?.dataSource !== "live" ||
+          !session ||
+          !heartbeatFresh
         ) {
           void connectSaved(savedConnection);
         }
       }
     });
 
+    const heartbeatWatchdog = setInterval(() => {
+      if (!mountedRef.current || AppState.currentState !== "active") return;
+      for (const savedConnection of savedConnectionsRef.current) {
+        const environmentId = savedConnection.environmentId;
+        const environment = environmentByIdRef.current[environmentId];
+        const session = sessions.get(environmentId);
+        if (!environment || !session) continue;
+        if (environment.connectionState !== "ready" || environment.dataSource !== "live") continue;
+        if (session.client.isHeartbeatFresh(HEARTBEAT_STALE_MS)) continue;
+
+        logStatus(
+          "environment",
+          "warning",
+          "Live heartbeat stale",
+          "Reconnecting silent WebSocket session.",
+          { environmentId, toast: false, phase: "reconnecting", inProgress: true }
+        );
+        updateEnvironment(environmentId, (current) => ({
+          ...current,
+          connectionState: "reconnecting",
+          connectionStep: "opening-websocket",
+          error: "Live connection interrupted. Reconnecting…",
+        }));
+        scheduleLiveRecovery(savedConnection, { graceMs: 0 });
+      }
+    }, HEARTBEAT_WATCHDOG_MS);
+
     return () => {
       cancelled = true;
       mountedRef.current = false;
       appStateSubscription.remove();
+      clearInterval(heartbeatWatchdog);
       for (const timer of pollTimers.values()) clearTimeout(timer);
       pollTimers.clear();
       pollDeadlines.clear();
+      for (const timer of recoveryTimersRef.current.values()) clearTimeout(timer);
+      recoveryTimersRef.current.clear();
+      recoveryAttemptsRef.current.clear();
       const activeSessions = [...sessions.values()];
       sessions.clear();
       connectionAttempts.clear();
       for (const session of activeSessions) void session.connection.dispose();
     };
-  }, [connectSaved]);
+  }, [connectSaved, scheduleLiveRecovery, updateEnvironment]);
 
   const addConnection = useCallback(
     async (input: ConnectionInput) => {
@@ -917,6 +1121,7 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
     async (environmentId: EnvironmentId) => {
       connectionAttemptsRef.current.delete(environmentId);
       stopHttpPolling(environmentId);
+      clearLiveRecovery(environmentId);
       const session = sessionsRef.current.get(environmentId);
       sessionsRef.current.delete(environmentId);
       clearTerminalMetadataSubscription(environmentId);
@@ -938,7 +1143,7 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
         return nextState;
       });
     },
-    [clearTerminalMetadataSubscription, stopHttpPolling]
+    [clearLiveRecovery, clearTerminalMetadataSubscription, stopHttpPolling]
   );
 
   const reconnect = useCallback(
@@ -946,9 +1151,12 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
       const savedConnection = savedConnectionsRef.current.find(
         (connection) => connection.environmentId === environmentId
       );
-      if (savedConnection) await connectSaved(savedConnection);
+      if (!savedConnection) return;
+      clearLiveRecovery(environmentId);
+      recoveryAttemptsRef.current.delete(environmentId);
+      await connectSaved(savedConnection);
     },
-    [connectSaved]
+    [clearLiveRecovery, connectSaved]
   );
 
   const reloadThreads = useCallback(
@@ -1051,7 +1259,16 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
   );
 
   const getClient = useCallback((environmentId: EnvironmentId) => {
-    if (environmentByIdRef.current[environmentId]?.connectionState !== "ready") return null;
+    const environment = environmentByIdRef.current[environmentId];
+    if (!environment) return null;
+    // Keep the RPC client available while the socket is recovering so thread
+    // subscriptions can resubscribe without a full remount thrash.
+    if (
+      environment.connectionState !== "ready" &&
+      environment.connectionState !== "reconnecting"
+    ) {
+      return null;
+    }
     return sessionsRef.current.get(environmentId)?.client ?? null;
   }, []);
 

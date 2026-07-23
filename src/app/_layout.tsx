@@ -1,6 +1,9 @@
 import { RegistryContext } from "@effect/atom-react";
+import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
 import { HeroUINativeProvider } from "heroui-native";
+import { useEffect } from "react";
 import { useColorScheme, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
@@ -13,10 +16,28 @@ import { AgentNotifications } from "@/runtime/AgentNotifications";
 import { appAtomRegistry } from "@/runtime/atom-registry";
 import { EnvironmentProvider } from "@/runtime/EnvironmentProvider";
 import { PreferencesProvider } from "@/runtime/PreferencesProvider";
+import { enableGeistTextPolyfill, geistFontMap } from "@/theme/geist";
+
+SplashScreen.preventAutoHideAsync().catch(() => {
+  // Splash may already be hidden in some environments.
+});
+
+enableGeistTextPolyfill();
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const backgroundColor = colorScheme === "dark" ? "#090909" : "#f4f4f5";
+  const [fontsLoaded, fontError] = useFonts(geistFontMap);
+
+  useEffect(() => {
+    if (fontsLoaded || fontError) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [fontsLoaded, fontError]);
+
+  if (!fontsLoaded && !fontError) {
+    return null;
+  }
 
   return (
     <GestureHandlerRootView style={{ flex: 1, backgroundColor }}>

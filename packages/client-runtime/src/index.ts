@@ -6,6 +6,7 @@ export * from "./shellSnapshot.ts";
 export * from "./threadDetailReducer.ts";
 export * from "./gitActions.ts";
 export * from "./transportError.ts";
+export * from "./reconnectBackoff.ts";
 export * from "./wsRpcProtocol.ts";
 export * from "./wsTransport.ts";
 export * from "./wsRpcClient.ts";
