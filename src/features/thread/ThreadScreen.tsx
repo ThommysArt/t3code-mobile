@@ -33,14 +33,14 @@ import { Screen } from "@/components/Screen";
 import { useThreadListActions } from "@/features/home/useThreadListActions";
 import { loadThreadDraft, saveThreadDraft } from "@/runtime/db";
 import { usePreferences } from "@/runtime/PreferencesProvider";
+import {
+  useAttachmentImageUri,
+  usePrefetchThreadAttachments,
+} from "@/runtime/useAttachmentImage";
 import { useThread } from "@/runtime/useThread";
 import { estimatedComposerChromeHeight } from "@/utils/bottomChrome";
 import { relativeTime } from "@/utils/time";
-import {
-  attachmentHeaders,
-  messageImageUrl,
-  type SelectedImageAttachment,
-} from "./messageAttachments";
+import { type SelectedImageAttachment } from "./messageAttachments";
 import { pickImageAttachments } from "./imageAttachmentPicker";
 import { MarkdownContent } from "./MarkdownContent";
 import { ModelSelectorDrawer, ThinkingOptionsDrawer } from "./ComposerSelectors";
@@ -69,12 +69,10 @@ function firstParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? (value[0] ?? "") : (value ?? "");
 }
 
-function MessageAttachment({
-  headers,
+function LocalMessageAttachment({
   name,
   uri,
 }: {
-  readonly headers: Readonly<Record<string, string>> | undefined;
   readonly name: string;
   readonly uri: string;
 }) {
@@ -94,7 +92,7 @@ function MessageAttachment({
         <>
           <Image
             accessibilityLabel={name}
-            source={{ uri, ...(headers ? { headers: { ...headers } } : {}) }}
+            source={{ uri }}
             cachePolicy="memory-disk"
             contentFit="cover"
             transition={150}
@@ -115,6 +113,73 @@ function MessageAttachment({
             </View>
           ) : null}
         </>
+      )}
+    </View>
+  );
+}
+
+function ServerMessageAttachment({
+  attachmentId,
+  environmentId,
+  name,
+}: {
+  readonly attachmentId: string;
+  readonly environmentId: string;
+  readonly name: string;
+}) {
+  const { uri, cacheKey, isLoading: resolving } = useAttachmentImageUri(
+    environmentId,
+    attachmentId
+  );
+  const [failed, setFailed] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setFailed(false);
+    setLoading(true);
+  }, [uri]);
+
+  return (
+    <View
+      className="mb-2.5 w-full overflow-hidden rounded-2xl bg-surface-secondary"
+      style={{ aspectRatio: 1.3 }}
+    >
+      {failed || (!resolving && !uri) ? (
+        <View className="flex-1 items-center justify-center gap-2 px-4">
+          <Text className="text-center text-xs text-muted">Unable to load {name}</Text>
+        </View>
+      ) : uri ? (
+        <>
+          <Image
+            accessibilityLabel={name}
+            source={{
+              uri,
+              ...(cacheKey ? { cacheKey } : {}),
+            }}
+            cachePolicy="memory-disk"
+            contentFit="cover"
+            transition={150}
+            style={{ height: "100%", width: "100%" }}
+            onLoadStart={() => {
+              setFailed(false);
+              setLoading(true);
+            }}
+            onLoad={() => setLoading(false)}
+            onError={() => {
+              setFailed(true);
+              setLoading(false);
+            }}
+          />
+          {loading || resolving ? (
+            <View className="absolute inset-0 items-center justify-center">
+              <ActivityIndicator color="#2563eb" />
+            </View>
+          ) : null}
+        </>
+      ) : (
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator color="#2563eb" />
+        </View>
       )}
     </View>
   );
@@ -155,12 +220,10 @@ function ComposerImageAttachment({
 }
 
 function MessageRow({
-  bearerToken,
-  httpBaseUrl,
+  environmentId,
   message,
 }: {
-  readonly bearerToken: string | null;
-  readonly httpBaseUrl: string | null;
+  readonly environmentId: string;
   readonly message: OrchestrationMessage & {
     readonly optimistic?: true;
     readonly localImageAttachments?: readonly { readonly name: string; readonly uri: string }[];
@@ -177,7 +240,6 @@ function MessageRow({
   if (!message.text.trim() && attachments.length === 0 && localImageAttachments.length === 0) {
     return null;
   }
-  const headers = attachmentHeaders(bearerToken);
   const copyMessage = () => {
     const text = message.text.trim();
     if (!text) return;
@@ -195,25 +257,20 @@ function MessageRow({
         }
       >
         {localImageAttachments.map((attachment) => (
-          <MessageAttachment
+          <LocalMessageAttachment
             key={attachment.uri}
-            headers={undefined}
             name={attachment.name}
             uri={attachment.uri}
           />
         ))}
-        {attachments.map((attachment) => {
-          const uri = messageImageUrl(httpBaseUrl, attachment.id);
-          if (!uri) return null;
-          return (
-            <MessageAttachment
-              key={attachment.id}
-              headers={headers}
-              name={attachment.name}
-              uri={uri}
-            />
-          );
-        })}
+        {attachments.map((attachment) => (
+          <ServerMessageAttachment
+            key={attachment.id}
+            attachmentId={attachment.id}
+            environmentId={environmentId}
+            name={attachment.name}
+          />
+        ))}
         {message.text.trim() ? (
           <>
             <View
@@ -272,22 +329,19 @@ function MessageRow({
 }
 
 function AssistantMessageRow({
-  bearerToken,
   checkpoint,
-  httpBaseUrl,
+  environmentId,
   message,
   showMeta,
 }: {
-  readonly bearerToken: string | null;
   readonly checkpoint: OrchestrationCheckpointSummary | null;
-  readonly httpBaseUrl: string | null;
+  readonly environmentId: string;
   readonly message: OrchestrationMessage;
   readonly showMeta: boolean;
 }) {
   const isDark = useColorScheme() === "dark";
   const [copied, setCopied] = useState(false);
   const attachments = message.attachments ?? [];
-  const headers = attachmentHeaders(bearerToken);
   const text = message.text.trim();
 
   if (text.length === 0 && attachments.length === 0) {
@@ -305,18 +359,14 @@ function AssistantMessageRow({
   return (
     <View className={showMeta ? "mb-5 px-1" : "mb-2 px-1"}>
       {text ? <MarkdownContent text={message.text} /> : null}
-      {attachments.map((attachment) => {
-        const uri = messageImageUrl(httpBaseUrl, attachment.id);
-        if (!uri) return null;
-        return (
-          <MessageAttachment
-            key={attachment.id}
-            headers={headers}
-            name={attachment.name}
-            uri={uri}
-          />
-        );
-      })}
+      {attachments.map((attachment) => (
+        <ServerMessageAttachment
+          key={attachment.id}
+          attachmentId={attachment.id}
+          environmentId={environmentId}
+          name={attachment.name}
+        />
+      ))}
       {checkpoint ? <AssistantChangedFiles checkpoint={checkpoint} /> : null}
       {showMeta ? (
         <View className="mt-1 flex-row items-center gap-2">
@@ -343,12 +393,11 @@ function AssistantMessageRow({
 }
 
 function FeedEntryRow({
-  bearerToken,
   checkpointByAssistantMessageId,
   copiedWorkRowId,
   entry,
+  environmentId,
   expandedWorkRows,
-  httpBaseUrl,
   terminalAssistantMessageIds,
   unsettledTurnId,
   onCopyWorkRow,
@@ -356,15 +405,14 @@ function FeedEntryRow({
   onToggleWorkGroup,
   onToggleWorkRow,
 }: {
-  readonly bearerToken: string | null;
   readonly checkpointByAssistantMessageId: ReadonlyMap<
     OrchestrationMessage["id"],
     OrchestrationCheckpointSummary
   >;
   readonly copiedWorkRowId: string | null;
   readonly entry: ThreadFeedEntry;
+  readonly environmentId: string;
   readonly expandedWorkRows: Readonly<Record<string, boolean>>;
-  readonly httpBaseUrl: string | null;
   readonly terminalAssistantMessageIds: ReadonlySet<string>;
   readonly unsettledTurnId: TurnId | null;
   readonly onCopyWorkRow: (rowId: string, value: string) => void;
@@ -407,9 +455,7 @@ function FeedEntryRow({
   if (entry.type === "message") {
     const { message } = entry;
     if (message.role === "user") {
-      return (
-        <MessageRow bearerToken={bearerToken} httpBaseUrl={httpBaseUrl} message={message} />
-      );
+      return <MessageRow environmentId={environmentId} message={message} />;
     }
 
     const assistantTurnStillInProgress =
@@ -423,9 +469,8 @@ function FeedEntryRow({
 
     return (
       <AssistantMessageRow
-        bearerToken={bearerToken}
         checkpoint={checkpointByAssistantMessageId.get(message.id) ?? null}
-        httpBaseUrl={httpBaseUrl}
+        environmentId={environmentId}
         message={message}
         showMeta={showMeta}
       />
@@ -459,8 +504,6 @@ export function ThreadScreen() {
     connectionState,
     dataSource,
     error,
-    bearerToken,
-    httpBaseUrl,
     isCached,
     isPending,
     interruptTurn,
@@ -473,6 +516,7 @@ export function ThreadScreen() {
     thread,
     updateModelSelection,
   } = useThread(environmentId, threadId);
+  usePrefetchThreadAttachments(environmentId, messages);
   const { preferences } = usePreferences();
   const { settleThread, unsettleThread, environmentSupportsSettlement } = useThreadListActions();
   const [draft, setDraft] = useState("");
@@ -692,7 +736,6 @@ export function ThreadScreen() {
           : option.selection;
       setSelectedModel(nextSelection);
       setModelError(null);
-      setModelSelectorOpen(false);
       void updateModelSelection(nextSelection).catch((selectionError: unknown) => {
         setModelError(
           selectionError instanceof Error ? selectionError.message : "Unable to update the model."
@@ -994,12 +1037,11 @@ export function ThreadScreen() {
           {feed.map((entry) => (
             <FeedEntryRow
               key={entry.id}
-              bearerToken={bearerToken}
               checkpointByAssistantMessageId={checkpointByAssistantMessageId}
               copiedWorkRowId={copiedWorkRowId}
               entry={entry}
+              environmentId={environmentId}
               expandedWorkRows={expandedWorkRows}
-              httpBaseUrl={httpBaseUrl}
               terminalAssistantMessageIds={terminalAssistantMessageIds}
               unsettledTurnId={unsettledTurnId}
               onCopyWorkRow={copyWorkRow}
@@ -1010,25 +1052,21 @@ export function ThreadScreen() {
           ))}
         </KeyboardChatScrollView>
       </BlurScreenRoot>
-      {effectiveModel ? (
-        <ModelSelectorDrawer
-          lockedProvider={hasExistingConversation}
-          options={modelOptions}
-          selected={effectiveModel}
-          visible={modelSelectorOpen}
-          onClose={() => setModelSelectorOpen(false)}
-          onSelect={selectModel}
-        />
-      ) : null}
-      {effectiveModel && thinkingDescriptors.length > 0 ? (
-        <ThinkingOptionsDrawer
-          descriptors={thinkingDescriptors}
-          selection={effectiveModel}
-          visible={thinkingSelectorOpen}
-          onClose={() => setThinkingSelectorOpen(false)}
-          onSelect={selectThinkingOption}
-        />
-      ) : null}
+      <ModelSelectorDrawer
+        lockedProvider={hasExistingConversation}
+        options={modelOptions}
+        selected={effectiveModel}
+        visible={modelSelectorOpen && effectiveModel != null}
+        onClose={() => setModelSelectorOpen(false)}
+        onSelect={selectModel}
+      />
+      <ThinkingOptionsDrawer
+        descriptors={thinkingDescriptors}
+        selection={effectiveModel}
+        visible={thinkingSelectorOpen && effectiveModel != null && thinkingDescriptors.length > 0}
+        onClose={() => setThinkingSelectorOpen(false)}
+        onSelect={selectThinkingOption}
+      />
     </Screen>
   );
 }
