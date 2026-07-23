@@ -1,6 +1,24 @@
 import type { ExpoConfig } from "expo/config";
+import type { WithAndroidWidgetsParams } from "react-native-android-widget";
 
 const packageJson = require("./package.json") as { readonly version: string };
+
+const androidWidgetConfig: WithAndroidWidgetsParams = {
+  widgets: [
+    {
+      name: "LatestThreads",
+      label: "Latest threads",
+      description: "Unsettled work first, then recent settled threads when under five.",
+      minWidth: "250dp",
+      minHeight: "180dp",
+      targetCellWidth: 4,
+      targetCellHeight: 3,
+      // Android enforces a 30-minute floor for automatic updates.
+      updatePeriodMillis: 30 * 60 * 1000,
+      previewImage: "./assets/widget-preview/latest-threads.png",
+    },
+  ],
+};
 
 const config: ExpoConfig = {
   name: "T3 Code Mobile",
@@ -82,6 +100,7 @@ const config: ExpoConfig = {
     ],
     "./plugins/withAndroidCleartextTraffic.cjs",
     "./plugins/withAndroidReleaseSigning.cjs",
+    ["react-native-android-widget", androidWidgetConfig],
   ],
   experiments: {
     typedRoutes: true,

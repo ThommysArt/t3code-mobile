@@ -67,6 +67,8 @@ import {
   normalizeWsBaseUrl,
   shouldUseHttpForHost,
 } from "@/utils/network";
+import { syncLatestThreadsWidget } from "@/features/widget/syncLatestThreadsWidget";
+import { getPreferences } from "./preferences";
 
 const HTTP_REQUEST_TIMEOUT_MS = 30_000;
 const CONNECTION_PROBE_TIMEOUT_MS = 8_000;
@@ -1292,6 +1294,35 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
   );
   const projects = catalog.projects;
   const threads = catalog.threads;
+
+  // Keep the Android home-screen widget in sync with the live catalog.
+  useEffect(() => {
+    if (isBootstrapping) return;
+    const timeout = setTimeout(() => {
+      const projectTitleByKey = new Map<string, string>();
+      for (const project of projects) {
+        projectTitleByKey.set(`${project.environmentId}:${project.id}`, project.title);
+      }
+      const settlementEnvironmentIds = new Set<EnvironmentId>();
+      let hasKnownCapabilities = false;
+      for (const environment of environments) {
+        if (!environment.serverConfig) continue;
+        hasKnownCapabilities = true;
+        if (environment.serverConfig.environment.capabilities.threadSettlement === true) {
+          settlementEnvironmentIds.add(environment.connection.environmentId);
+        }
+      }
+      void syncLatestThreadsWidget({
+        threads,
+        projectTitleByKey,
+        // Omit the set until at least one serverConfig is known so cached
+        // settlement fields still classify correctly offline.
+        settlementEnvironmentIds: hasKnownCapabilities ? settlementEnvironmentIds : undefined,
+        autoSettleAfterDays: getPreferences().autoSettleAfterDays,
+      });
+    }, 750);
+    return () => clearTimeout(timeout);
+  }, [environments, isBootstrapping, projects, threads]);
 
   const getEnvironment = useCallback(
     (environmentId: EnvironmentId) => environmentById[environmentId] ?? null,
