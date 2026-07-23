@@ -16,18 +16,18 @@ import { AgentNotifications } from "@/runtime/AgentNotifications";
 import { appAtomRegistry } from "@/runtime/atom-registry";
 import { EnvironmentProvider } from "@/runtime/EnvironmentProvider";
 import { PreferencesProvider } from "@/runtime/PreferencesProvider";
-import { enableGeistTextPolyfill, geistFontMap } from "@/theme/geist";
+import { appFontMap, enableAppTextPolyfill } from "@/theme/fonts";
 
 SplashScreen.preventAutoHideAsync().catch(() => {
   // Splash may already be hidden in some environments.
 });
 
-enableGeistTextPolyfill();
+enableAppTextPolyfill();
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const backgroundColor = colorScheme === "dark" ? "#090909" : "#f4f4f5";
-  const [fontsLoaded, fontError] = useFonts(geistFontMap);
+  const [fontsLoaded, fontError] = useFonts(appFontMap);
 
   useEffect(() => {
     if (fontsLoaded || fontError) {

@@ -27,6 +27,7 @@ import { useEnvironments } from "@/runtime/EnvironmentProvider";
 import { usePreferences } from "@/runtime/PreferencesProvider";
 import { compareThreadsByInitiatedAt, getThreadInitiatedAt } from "@/runtime/catalog";
 import { logStatus } from "@/runtime/statusLog";
+import { GEIST_MONO } from "@/theme/fonts";
 import { relativeTime } from "@/utils/time";
 
 import { ThreadListV2Row } from "./ThreadListV2Items";
@@ -193,7 +194,12 @@ function ThreadRow(props: {
           <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
             <AppIcon name="branch" size={11} color={muted} strokeWidth={1.7} />
             <Text
-              style={{ flex: 1, color: muted, fontFamily: "monospace", fontSize: 11 }}
+              style={{
+                flex: 1,
+                color: muted,
+                fontFamily: GEIST_MONO,
+                fontSize: 11,
+              }}
               numberOfLines={1}
             >
               {props.thread.branch ?? "main"}
@@ -635,10 +641,10 @@ export function HomeScreen() {
                       style={{
                         flex: 1,
                         color: muted,
-                        fontSize: 12,
-                        fontWeight: "700",
-                        letterSpacing: 0.6,
-                        textTransform: "uppercase",
+                        fontSize: 11,
+                        fontWeight: "500",
+                        letterSpacing: 0.1,
+                        fontFamily: GEIST_MONO,
                       }}
                       numberOfLines={1}
                     >

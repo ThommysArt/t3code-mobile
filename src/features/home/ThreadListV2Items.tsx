@@ -3,9 +3,10 @@ import type {
   EnvironmentScopedThreadShell,
 } from "@t3tools/client-runtime";
 import { memo, useCallback } from "react";
-import { Alert, Pressable, Text, useColorScheme, View } from "react-native";
+import { Alert, Pressable, StyleSheet, Text, useColorScheme, View } from "react-native";
 
 import { AppIcon } from "@/components/AppIcon";
+import { GEIST_MONO } from "@/theme/fonts";
 import { relativeTime } from "@/utils/time";
 
 import { resolveThreadListV2Status, type ThreadListV2Status } from "./threadListV2";
@@ -27,22 +28,22 @@ export const ThreadListV2SettledDivider = memo(function ThreadListV2SettledDivid
   readonly isDark: boolean;
 }) {
   const muted = props.isDark ? "#737373" : "#737373";
-  const border = props.isDark ? "#2a2a2a" : "#e5e5e5";
+  const border = props.isDark ? "#1f1f1f" : "#e8e8ea";
   return (
     <View
       style={{
-        marginTop: 16,
-        marginBottom: 6,
+        marginTop: 14,
+        marginBottom: 4,
         flexDirection: "row",
         alignItems: "center",
         gap: 10,
-        paddingHorizontal: 8,
+        paddingHorizontal: 6,
       }}
     >
-      <Text style={{ color: muted, fontSize: 11, fontWeight: "700", letterSpacing: 0.8 }}>
-        SETTLED
+      <Text style={{ color: muted, fontSize: 11, fontWeight: "600", letterSpacing: 0.6 }}>
+        Settled
       </Text>
-      <View style={{ flex: 1, height: 1, backgroundColor: border }} />
+      <View style={{ flex: 1, height: StyleSheet.hairlineWidth, backgroundColor: border }} />
     </View>
   );
 });
@@ -70,18 +71,17 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
     onUnsettleThread,
   } = props;
 
+  // Keep cards close to the screen so the list reads as one surface, not a stack of tiles.
+  const background = isDark ? "#090909" : "#f4f4f5";
   const foreground = isDark ? "#f5f5f5" : "#171717";
   const muted = isDark ? "#858585" : "#737373";
-  const surface = isDark ? "#171717" : "#ffffff";
-  const border = isDark ? "#292929" : "#dedede";
+  const cardSurface = isDark ? "#111111" : "#fafafa";
+  const cardBorder = isDark ? "#1c1c1c" : "#ebebed";
+  const iconTile = isDark ? "#181818" : "#f0f0f1";
   const status = resolveThreadListV2Status(thread);
   const statusMeta = STATUS_META[status];
   const timeLabel = threadTimeLabel(thread);
-  const statusColor = statusMeta
-    ? isDark
-      ? statusMeta.dark
-      : statusMeta.light
-    : muted;
+  const statusColor = statusMeta ? (isDark ? statusMeta.dark : statusMeta.light) : muted;
 
   const openLifecycleMenu = useCallback(() => {
     const buttons: {
@@ -114,6 +114,25 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
     variant,
   ]);
 
+  const statusBarColor =
+    status === "working"
+      ? isDark
+        ? "#0ea5e9"
+        : "#38bdf8"
+      : status === "approval"
+        ? isDark
+          ? "#f59e0b"
+          : "#fbbf24"
+        : status === "failed"
+          ? isDark
+            ? "#ef4444"
+            : "#f87171"
+          : status === "input"
+            ? isDark
+              ? "#6366f1"
+              : "#818cf8"
+            : "transparent";
+
   return (
     <>
       {props.showSettledDivider ? <ThreadListV2SettledDivider isDark={isDark} /> : null}
@@ -130,85 +149,67 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
           onLongPress={settlementSupported ? openLifecycleMenu : undefined}
           style={({ pressed }) => ({
             opacity: pressed ? 0.72 : 1,
-            borderRadius: 18,
-            borderWidth: 1,
-            borderColor: border,
-            backgroundColor: surface,
+            borderRadius: 14,
+            borderWidth: StyleSheet.hairlineWidth,
+            borderColor: cardBorder,
+            backgroundColor: cardSurface,
             overflow: "hidden",
-            marginBottom: 8,
+            marginBottom: 6,
           })}
         >
-          <View
-            style={{
-              height: 3,
-              backgroundColor:
-                status === "working"
-                  ? isDark
-                    ? "#0ea5e9"
-                    : "#38bdf8"
-                  : status === "approval"
-                    ? isDark
-                      ? "#f59e0b"
-                      : "#fbbf24"
-                    : status === "failed"
-                      ? isDark
-                        ? "#ef4444"
-                        : "#f87171"
-                      : status === "input"
-                        ? isDark
-                          ? "#6366f1"
-                          : "#818cf8"
-                        : "transparent",
-            }}
-          />
-          <View style={{ paddingHorizontal: 14, paddingVertical: 12, gap: 6 }}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <View style={{ height: 2, backgroundColor: statusBarColor }} />
+          <View style={{ paddingHorizontal: 12, paddingVertical: 10, gap: 4 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
               <View
                 style={{
-                  width: 28,
-                  height: 28,
-                  borderRadius: 9,
+                  width: 22,
+                  height: 22,
+                  borderRadius: 7,
                   alignItems: "center",
                   justifyContent: "center",
-                  backgroundColor: isDark ? "#242424" : "#f0f0f0",
+                  backgroundColor: iconTile,
                 }}
               >
-                <AppIcon name="folder" size={13} color={muted} />
+                <AppIcon name="folder" size={11} color={muted} />
               </View>
               <Text
                 style={{
                   flex: 1,
                   color: muted,
-                  fontSize: 11,
-                  fontWeight: "700",
-                  letterSpacing: 0.5,
-                  textTransform: "uppercase",
-                  fontFamily: "monospace",
+                  fontSize: 10,
+                  fontWeight: "500",
+                  letterSpacing: 0.1,
+                  fontFamily: GEIST_MONO,
                 }}
                 numberOfLines={1}
               >
                 {project?.title ?? "Project"}
               </Text>
-              <Text style={{ color: statusColor, fontSize: 11, fontWeight: "600" }}>
+              <Text style={{ color: statusColor, fontSize: 10, fontWeight: "600" }}>
                 {statusMeta?.label ?? timeLabel}
               </Text>
             </View>
             <Text
-              style={{ color: foreground, fontSize: 16, fontWeight: "600", lineHeight: 22 }}
+              style={{
+                color: foreground,
+                fontSize: 14,
+                fontWeight: "600",
+                lineHeight: 19,
+              }}
               numberOfLines={2}
             >
               {thread.title}
             </Text>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
               {thread.branch ? (
                 <>
-                  <AppIcon name="branch" size={11} color={muted} strokeWidth={1.7} />
+                  <AppIcon name="branch" size={10} color={muted} strokeWidth={1.7} />
                   <Text
                     style={{
                       flex: 1,
                       color: muted,
-                      fontFamily: "monospace",
-                      fontSize: 11,
+                      fontFamily: GEIST_MONO,
+                      fontSize: 10,
                     }}
                     numberOfLines={1}
                   >
@@ -217,14 +218,14 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
                   </Text>
                 </>
               ) : environmentLabel ? (
-                <Text style={{ flex: 1, color: muted, fontSize: 11 }} numberOfLines={1}>
+                <Text style={{ flex: 1, color: muted, fontSize: 10 }} numberOfLines={1}>
                   {environmentLabel}
                 </Text>
               ) : (
                 <View style={{ flex: 1 }} />
               )}
               {statusMeta ? (
-                <Text style={{ color: muted, fontSize: 11 }}>{timeLabel}</Text>
+                <Text style={{ color: muted, fontSize: 10 }}>{timeLabel}</Text>
               ) : null}
             </View>
           </View>
@@ -242,19 +243,20 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
           onLongPress={settlementSupported ? openLifecycleMenu : undefined}
           style={({ pressed }) => ({
             opacity: pressed ? 0.66 : 1,
-            minHeight: 48,
+            minHeight: 44,
             flexDirection: "row",
             alignItems: "center",
-            gap: 10,
-            paddingHorizontal: 10,
-            paddingVertical: 10,
+            gap: 9,
+            paddingHorizontal: 8,
+            paddingVertical: 8,
+            backgroundColor: background,
           })}
         >
           <View style={{ opacity: 0.4 }}>
-            <AppIcon name="folder" size={14} color={muted} />
+            <AppIcon name="folder" size={13} color={muted} />
           </View>
           <Text
-            style={{ flex: 1, color: muted, fontSize: 15, fontWeight: "500" }}
+            style={{ flex: 1, color: muted, fontSize: 14, fontWeight: "500" }}
             numberOfLines={1}
           >
             {thread.title}
@@ -262,8 +264,8 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
           <Text
             style={{
               color: isDark ? "#525252" : "#a3a3a3",
-              fontSize: 12,
-              fontFamily: "monospace",
+              fontSize: 11,
+              fontFamily: GEIST_MONO,
             }}
           >
             {timeLabel}
