@@ -43,23 +43,25 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor }}>
       <SafeAreaProvider>
         <KeyboardProvider>
-          <HeroUINativeProvider
-            config={{
-              toast: {
-                defaultProps: {
-                  placement: "top",
-                  isSwipeable: true,
-                },
-                insets: {
-                  left: 12,
-                  right: 12,
-                },
-              },
-            }}
-          >
-            <PreferencesProvider>
-              <RegistryContext.Provider value={appAtomRegistry}>
-                <EnvironmentProvider>
+          {/* EnvironmentProvider must wrap HeroUINativeProvider so portaled
+              surfaces (BottomSheet, dialogs) still see connection context. */}
+          <PreferencesProvider>
+            <RegistryContext.Provider value={appAtomRegistry}>
+              <EnvironmentProvider>
+                <HeroUINativeProvider
+                  config={{
+                    toast: {
+                      defaultProps: {
+                        placement: "top",
+                        isSwipeable: true,
+                      },
+                      insets: {
+                        left: 12,
+                        right: 12,
+                      },
+                    },
+                  }}
+                >
                   <View style={{ flex: 1, position: "relative" }}>
                     <AgentNotifications />
                     <StatusToastBridge />
@@ -68,10 +70,10 @@ export default function RootLayout() {
                       screenOptions={{ headerShown: false, contentStyle: { backgroundColor } }}
                     />
                   </View>
-                </EnvironmentProvider>
-              </RegistryContext.Provider>
-            </PreferencesProvider>
-          </HeroUINativeProvider>
+                </HeroUINativeProvider>
+              </EnvironmentProvider>
+            </RegistryContext.Provider>
+          </PreferencesProvider>
         </KeyboardProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

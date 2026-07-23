@@ -57,6 +57,12 @@
       "react-native": "./src/sourceControl.ts",
       "import": "./src/sourceControl.ts",
       "default": "./src/sourceControl.ts"
+    },
+    "./projectFavicon": {
+      "types": "./src/projectFavicon.ts",
+      "react-native": "./src/projectFavicon.ts",
+      "import": "./src/projectFavicon.ts",
+      "default": "./src/projectFavicon.ts"
     }
   },
   "dependencies": {

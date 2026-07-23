@@ -19,6 +19,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon } from "@/components/AppIcon";
+import { ProjectFavicon } from "@/components/ProjectFavicon";
 import { BlurScreenRoot, HeaderBubble, HeaderSpacer } from "@/components/chrome";
 import { useChromeTheme } from "@/components/chrome/useChromeTheme";
 import { FloatingBottomChrome } from "@/components/FloatingBottomChrome";
@@ -31,6 +32,7 @@ import { logStatus } from "@/runtime/statusLog";
 import { GEIST_MONO } from "@/theme/fonts";
 import { relativeTime } from "@/utils/time";
 
+import { NewThreadProjectPicker } from "./NewThreadProjectPicker";
 import { ThreadListV2Row } from "./ThreadListV2Items";
 import {
   buildThreadListV2Items,
@@ -113,6 +115,7 @@ function statusTone(
 
 function ThreadRow(props: {
   readonly thread: EnvironmentScopedThreadShell;
+  readonly project: EnvironmentScopedProjectShell | null;
   readonly isLast: boolean;
   readonly onPress: () => void;
   readonly isDark: boolean;
@@ -146,6 +149,7 @@ function ThreadRow(props: {
             alignItems: "center",
             justifyContent: "center",
             borderRadius: 8,
+            overflow: "hidden",
             backgroundColor: isWorking
               ? props.isDark
                 ? "#0c1a2e"
@@ -158,7 +162,12 @@ function ThreadRow(props: {
           {isWorking ? (
             <ActivityIndicator size="small" color={iconColor} style={{ transform: [{ scale: 0.75 }] }} />
           ) : (
-            <AppIcon name="branch" size={13} color={iconColor} strokeWidth={1.8} />
+            <ProjectFavicon
+              environmentId={props.thread.environmentId}
+              projectTitle={props.project?.title ?? props.thread.title}
+              workspaceRoot={props.project?.workspaceRoot ?? null}
+              size={18}
+            />
           )}
         </View>
         <View style={{ flex: 1, gap: 2 }}>
@@ -244,6 +253,7 @@ export function HomeScreen() {
   const [settledVisibleCount, setSettledVisibleCount] = useState(
     THREAD_LIST_V2_SETTLED_INITIAL_COUNT
   );
+  const [newThreadPickerOpen, setNewThreadPickerOpen] = useState(false);
   const [bottomChromeHeight, setBottomChromeHeight] = useState(() =>
     estimatedSearchChromeHeight(insets)
   );
@@ -316,12 +326,11 @@ export function HomeScreen() {
   const multiEnvironment = environments.length > 1;
   const environmentLabelById = useMemo(() => {
     const labels = new Map<EnvironmentId, string>();
-    if (!multiEnvironment) return labels;
     for (const environment of environments) {
       labels.set(environment.connection.environmentId, environment.connection.label);
     }
     return labels;
-  }, [environments, multiEnvironment]);
+  }, [environments]);
 
   // Recompute partition periodically so inactivity auto-settle can tick without
   // requiring a shell event.
@@ -527,8 +536,23 @@ export function HomeScreen() {
                 />
               </View>
               <Pressable
-                accessibilityLabel="Refresh threads"
-                onPress={() => void reloadThreads()}
+                accessibilityLabel={
+                  threadListV2Enabled ? "Start a new thread" : "Refresh threads"
+                }
+                onPress={() => {
+                  if (threadListV2Enabled) {
+                    setNewThreadPickerOpen(true);
+                    return;
+                  }
+                  void reloadThreads();
+                }}
+                onLongPress={
+                  threadListV2Enabled
+                    ? () => {
+                        void reloadThreads();
+                      }
+                    : undefined
+                }
                 style={({ pressed }) => ({
                   width: 46,
                   height: 46,
@@ -541,7 +565,11 @@ export function HomeScreen() {
                   opacity: pressed ? 0.66 : 1,
                 })}
               >
-                <AppIcon name="refresh" size={19} color={isDark ? "#f5f5f5" : "#262626"} />
+                <AppIcon
+                  name={threadListV2Enabled ? "plus" : "refresh"}
+                  size={19}
+                  color={isDark ? "#f5f5f5" : "#262626"}
+                />
               </Pressable>
             </View>
           </FloatingBottomChrome>
@@ -628,7 +656,9 @@ export function HomeScreen() {
                     showSettledDivider={item.showSettledDivider}
                     project={project}
                     environmentLabel={
-                      environmentLabelById.get(item.thread.environmentId) ?? null
+                      multiEnvironment
+                        ? (environmentLabelById.get(item.thread.environmentId) ?? null)
+                        : null
                     }
                     serverConfig={
                       serverConfigByEnvironmentId.get(item.thread.environmentId) ?? null
@@ -682,7 +712,16 @@ export function HomeScreen() {
                       paddingHorizontal: 6,
                     }}
                   >
-                    <AppIcon name="folder" size={12} color={muted} />
+                    {group.project ? (
+                      <ProjectFavicon
+                        environmentId={group.project.environmentId}
+                        projectTitle={group.project.title}
+                        workspaceRoot={group.project.workspaceRoot}
+                        size={14}
+                      />
+                    ) : (
+                      <AppIcon name="folder" size={12} color={muted} />
+                    )}
                     <Text
                       style={{
                         flex: 1,
@@ -746,6 +785,7 @@ export function HomeScreen() {
                         <ThreadRow
                           key={`${thread.environmentId}:${thread.id}`}
                           thread={thread}
+                          project={group.project}
                           isDark={isDark}
                           isLast={index === visibleThreads.length - 1}
                           onPress={() => openThread(thread)}
@@ -761,6 +801,24 @@ export function HomeScreen() {
           )}
         </ScrollView>
       </BlurScreenRoot>
+
+      <NewThreadProjectPicker
+        visible={newThreadPickerOpen}
+        projects={projects}
+        environmentLabels={environmentLabelById}
+        multiEnvironment={multiEnvironment}
+        onClose={() => setNewThreadPickerOpen(false)}
+        onSelect={(project) => {
+          setNewThreadPickerOpen(false);
+          router.push({
+            pathname: "/projects/[environmentId]/[projectId]/new-thread",
+            params: {
+              environmentId: project.environmentId,
+              projectId: project.id,
+            },
+          });
+        }}
+      />
     </Screen>
   );
 }

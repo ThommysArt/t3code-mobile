@@ -22,6 +22,7 @@ import Animated, {
 } from "react-native-reanimated";
 
 import { AppIcon } from "@/components/AppIcon";
+import { ProjectFavicon } from "@/components/ProjectFavicon";
 import { ProviderIcon } from "@/components/ProviderIcon";
 import { useThreadPr } from "@/runtime/useThreadPr";
 import { GEIST_MONO } from "@/theme/fonts";
@@ -225,9 +226,15 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
                   alignItems: "center",
                   justifyContent: "center",
                   backgroundColor: iconTile,
+                  overflow: "hidden",
                 }}
               >
-                <AppIcon name="folder" size={11} color={muted} />
+                <ProjectFavicon
+                  environmentId={thread.environmentId}
+                  projectTitle={project?.title ?? "Project"}
+                  workspaceRoot={project?.workspaceRoot ?? null}
+                  size={16}
+                />
               </View>
               <Text
                 style={{
@@ -329,8 +336,13 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
             backgroundColor: background,
           })}
         >
-          <View style={{ opacity: 0.4 }}>
-            <AppIcon name="folder" size={13} color={muted} />
+          <View style={{ opacity: 0.55 }}>
+            <ProjectFavicon
+              environmentId={thread.environmentId}
+              projectTitle={project?.title ?? thread.title}
+              workspaceRoot={project?.workspaceRoot ?? null}
+              size={14}
+            />
           </View>
           <Text
             style={{ flex: 1, color: muted, fontSize: 14, fontWeight: "500" }}
