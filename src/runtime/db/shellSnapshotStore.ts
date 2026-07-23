@@ -50,7 +50,9 @@ export async function loadCachedShellSnapshot(
       snapshot: parsed,
     });
     if (Option.isNone(decoded) || decoded.value.environmentId !== environmentId) {
-      logStatus("db", "warning", "Invalid cached shell", `Skipped cache for ${environmentId}`);
+      logStatus("db", "warning", "Invalid cached shell", `Skipped cache for ${environmentId}`, {
+        toast: false,
+      });
       return null;
     }
 
@@ -61,7 +63,7 @@ export async function loadCachedShellSnapshot(
       "warning",
       "Failed to read cached shell",
       error instanceof Error ? error.message : String(error),
-      { environmentId }
+      { environmentId, toast: false }
     );
     return null;
   }
@@ -96,7 +98,8 @@ export async function loadAllCachedShellSnapshots(): Promise<readonly CachedShel
       "db",
       "warning",
       "Failed to load shell snapshots",
-      error instanceof Error ? error.message : String(error)
+      error instanceof Error ? error.message : String(error),
+      { toast: false }
     );
     return [];
   }
@@ -135,7 +138,7 @@ export async function saveCachedShellSnapshot(
       "warning",
       "Failed to save shell snapshot",
       error instanceof Error ? error.message : String(error),
-      { environmentId }
+      { environmentId, toast: false }
     );
   }
 }

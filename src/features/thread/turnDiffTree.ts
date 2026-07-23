@@ -83,8 +83,9 @@ function compactDirectoryNode(node: TurnDiffTreeDirectoryNode): TurnDiffTreeDire
 }
 
 function toTreeNodes(directory: MutableDirectoryNode): TurnDiffTreeNode[] {
+  // Hermes does not implement Array.prototype.toSorted; sort a copy instead.
   const subdirectories: TurnDiffTreeDirectoryNode[] = Array.from(directory.directories.values())
-    .toSorted(compareByName)
+    .sort(compareByName)
     .map<TurnDiffTreeDirectoryNode>((subdirectory) => ({
       kind: "directory",
       name: subdirectory.name,
@@ -97,7 +98,7 @@ function toTreeNodes(directory: MutableDirectoryNode): TurnDiffTreeNode[] {
     }))
     .map((subdirectory) => compactDirectoryNode(subdirectory));
 
-  const files = directory.files.toSorted(compareByName);
+  const files = [...directory.files].sort(compareByName);
   return [...subdirectories, ...files];
 }
 

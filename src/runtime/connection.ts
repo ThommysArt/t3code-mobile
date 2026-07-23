@@ -53,7 +53,9 @@ function normalizeConnectionInput(input: ConnectionInput): ConnectionInput {
 }
 
 export async function bootstrapConnection(input: ConnectionInput): Promise<SavedConnection> {
-  logStatus("environment", "info", "Bootstrapping connection", "Resolving pairing target");
+  logStatus("environment", "info", "Bootstrapping connection", "Resolving pairing target", {
+    toast: false,
+  });
   const target = resolveRemotePairingTarget(normalizeConnectionInput(input));
   const httpBaseUrl = normalizeHttpBaseUrl(target.httpBaseUrl);
   const wsBaseUrl = normalizeWsBaseUrl(target.wsBaseUrl);
@@ -89,7 +91,7 @@ export async function bootstrapConnection(input: ConnectionInput): Promise<Saved
     "success",
     "Connection bootstrapped",
     `${savedConnection.label} (${savedConnection.displayUrl})`,
-    { environmentId: savedConnection.environmentId }
+    { environmentId: savedConnection.environmentId, toast: false }
   );
   return savedConnection;
 }

@@ -25,6 +25,8 @@ import type Reanimated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon } from "@/components/AppIcon";
+import { ConnectionStatusIndicator } from "@/components/ConnectionStatusIndicator";
+import { connectionStatusFromEnvironment } from "@/components/connectionStatus";
 import { BlurScreenRoot, HeaderBubble, HeaderSpacer } from "@/components/chrome";
 import { useChromeTheme } from "@/components/chrome/useChromeTheme";
 import { FloatingBottomChrome } from "@/components/FloatingBottomChrome";
@@ -502,6 +504,7 @@ export function ThreadScreen() {
     cachedReceivedAt,
     clearSendError,
     connectionState,
+    connectionStep,
     dataSource,
     error,
     isCached,
@@ -594,8 +597,16 @@ export function ThreadScreen() {
   const busy = thread?.session?.status === "running" || thread?.session?.status === "starting";
   const live = connectionState === "ready";
   const canSend = Boolean(thread && (draft.trim() || selectedAttachments.length > 0));
-  const statusLabel = live ? "Live" : dataSource === "http" ? "HTTP sync" : "Offline";
-  const statusColor = live ? "#22c55e" : dataSource === "http" ? "#f59e0b" : "#737373";
+  const connectionStatus = useMemo(
+    () =>
+      connectionStatusFromEnvironment({
+        connectionState,
+        connectionStep,
+        dataSource,
+      }),
+    [connectionState, connectionStep, dataSource]
+  );
+  const statusColor = connectionStatus.color;
   const effectiveModel = selectedModel ?? thread?.modelSelection ?? shell?.modelSelection ?? null;
   const allModelOptions = useMemo(
     () => (effectiveModel ? buildModelOptions(serverConfig, effectiveModel) : []),
@@ -794,7 +805,7 @@ export function ThreadScreen() {
   }, []);
 
   const threadTitle = thread?.title ?? shell?.title ?? "Thread";
-  const threadSubtitle = `${statusLabel} · ${thread?.branch ?? shell?.branch ?? "main"}`;
+  const branchLabel = thread?.branch ?? shell?.branch ?? "main";
   const settlementSupported =
     shell != null && environmentSupportsSettlement(shell.environmentId);
   const nowIso = new Date().toISOString();
@@ -822,7 +833,30 @@ export function ThreadScreen() {
             <HeaderBubble accessibilityLabel="Go back" onPress={() => router.back()} variant="icon">
               <AppIcon name="back" size={21} color={theme.foreground} />
             </HeaderBubble>
-            <HeaderBubble subtitle={threadSubtitle} title={threadTitle} variant="title" />
+            <HeaderBubble variant="title">
+              <View style={{ gap: 2, minWidth: 0 }}>
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    color: theme.foreground,
+                    fontSize: 15,
+                    fontWeight: "600",
+                    lineHeight: 17,
+                  }}
+                >
+                  {threadTitle}
+                </Text>
+                <View className="flex-row items-center gap-1.5" style={{ minWidth: 0 }}>
+                  <ConnectionStatusIndicator status={connectionStatus} compact />
+                  <Text
+                    numberOfLines={1}
+                    style={{ color: theme.muted, fontSize: 10, lineHeight: 12, flexShrink: 1 }}
+                  >
+                    · {branchLabel}
+                  </Text>
+                </View>
+              </View>
+            </HeaderBubble>
             <HeaderSpacer />
             {showSettleAction ? (
               <HeaderBubble

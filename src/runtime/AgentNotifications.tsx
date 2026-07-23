@@ -572,6 +572,7 @@ export function AgentNotifications() {
         environmentId: context.environmentId,
         phase: "syncing",
         inProgress: true,
+        toast: false,
       });
 
       try {
@@ -584,6 +585,7 @@ export function AgentNotifications() {
         logStatus("git", "success", result.toast.title, result.toast.description, {
           environmentId: context.environmentId,
           inProgress: false,
+          toast: true,
         });
       } catch (error) {
         logStatus(

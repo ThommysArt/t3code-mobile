@@ -426,12 +426,12 @@ export function GeneralSettingsScreen() {
             />
             <SettingsDivider />
             <SettingsRow
-              title="Minimal logging"
-              description="Only show important status toasts such as errors and connection issues."
+              title="Less toasts"
+              description="Hide routine connection and sync toasts. Keep major errors and source-control results. Status still shows on the live indicator."
               control={
                 <SettingsSwitch
-                  value={preferences.minimalLogging}
-                  onValueChange={(value) => void updatePreferences({ minimalLogging: value })}
+                  value={preferences.lessToasts}
+                  onValueChange={(value) => void updatePreferences({ lessToasts: value })}
                 />
               }
             />

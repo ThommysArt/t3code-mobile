@@ -19,9 +19,11 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon } from "@/components/AppIcon";
+import { ConnectionStatusIndicator } from "@/components/ConnectionStatusIndicator";
 import { ProjectFavicon } from "@/components/ProjectFavicon";
 import { BlurScreenRoot, HeaderBubble, HeaderSpacer } from "@/components/chrome";
 import { useChromeTheme } from "@/components/chrome/useChromeTheme";
+import { aggregateConnectionStatus } from "@/components/connectionStatus";
 import { FloatingBottomChrome } from "@/components/FloatingBottomChrome";
 import { Screen } from "@/components/Screen";
 import { estimatedSearchChromeHeight } from "@/utils/bottomChrome";
@@ -50,25 +52,6 @@ interface ProjectGroup {
 
 function scopedProjectKey(environmentId: string, projectId: string): string {
   return `${environmentId}:${projectId}`;
-}
-
-function connectionStepLabel(step: string): string {
-  switch (step) {
-    case "checking-server":
-      return "Checking server";
-    case "validating-session":
-      return "Validating session";
-    case "opening-websocket":
-      return "Opening WebSocket";
-    case "syncing-threads":
-      return "Syncing threads";
-    case "refreshing-http":
-      return "Refreshing";
-    case "http-ready":
-      return "HTTP sync";
-    default:
-      return "Offline";
-  }
 }
 
 function statusTone(
@@ -395,30 +378,10 @@ export function HomeScreen() {
     threads,
   ]);
 
-  const readyCount = environments.filter(
-    (environment) => environment.connectionState === "ready"
-  ).length;
-  const hasHttpData = environments.some((environment) => environment.dataSource === "http");
-  const hasCachedData = environments.some((environment) => environment.dataSource === "cache");
-  const isConnecting = environments.some(
-    (environment) =>
-      environment.connectionState === "connecting" || environment.connectionState === "reconnecting"
+  const connectionStatus = useMemo(
+    () => aggregateConnectionStatus(environments),
+    [environments]
   );
-  const activeStep = environments.find(
-    (environment) => environment.connectionState !== "ready"
-  )?.connectionStep;
-  const connectionLabel =
-    readyCount > 0
-      ? "Live"
-      : activeStep && activeStep !== "offline"
-        ? connectionStepLabel(activeStep)
-        : hasHttpData
-          ? "HTTP sync"
-          : hasCachedData
-            ? "Cached"
-            : "Offline";
-  const connectionColor =
-    readyCount > 0 ? "#22c55e" : hasHttpData ? "#f59e0b" : isConnecting ? "#60a5fa" : "#737373";
 
   const catalogEmpty = threadListV2Enabled
     ? threadListV2Layout.items.length === 0
@@ -589,14 +552,10 @@ export function HomeScreen() {
           showsVerticalScrollIndicator={false}
         >
           {environments.length > 0 ? (
-            <View className="flex-row items-center gap-1.5">
-              <View className="h-2 w-2 rounded-full" style={{ backgroundColor: connectionColor }} />
-              <Text className="text-[11px] font-semibold text-muted">{connectionLabel}</Text>
-              <Text className="text-[11px] text-muted">
-                {threads.length} thread{threads.length === 1 ? "" : "s"}
-              </Text>
-              {isConnecting ? <ActivityIndicator size="small" color={connectionColor} /> : null}
-            </View>
+            <ConnectionStatusIndicator
+              status={connectionStatus}
+              detail={`${threads.length} thread${threads.length === 1 ? "" : "s"}`}
+            />
           ) : null}
           {isBootstrapping ? (
             <View className="items-center gap-3 rounded-3xl border border-border bg-surface px-5 py-10">

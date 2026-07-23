@@ -29,6 +29,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon } from "@/components/AppIcon";
+import { ConnectionStatusIndicator } from "@/components/ConnectionStatusIndicator";
+import { connectionStatusFromEnvironment } from "@/components/connectionStatus";
 import { BlurScreenRoot, HeaderBubble, HeaderSpacer } from "@/components/chrome";
 import { useChromeTheme } from "@/components/chrome/useChromeTheme";
 import {
@@ -134,7 +136,19 @@ export function GitScreen() {
   const threadIdRaw = firstParam(params.threadId);
   const environmentId = EnvironmentId.make(environmentIdRaw);
   const { getClient, projects } = useEnvironments();
-  const { shell, thread } = useThread(environmentIdRaw, threadIdRaw);
+  const { shell, thread, connectionState, connectionStep, dataSource } = useThread(
+    environmentIdRaw,
+    threadIdRaw
+  );
+  const connectionStatus = useMemo(
+    () =>
+      connectionStatusFromEnvironment({
+        connectionState,
+        connectionStep,
+        dataSource,
+      }),
+    [connectionState, connectionStep, dataSource]
+  );
   const project = projects.find(
     (candidate) =>
       candidate.environmentId === environmentId &&
@@ -276,6 +290,7 @@ export function GitScreen() {
         environmentId,
         phase: "syncing",
         inProgress: true,
+        toast: false,
       });
       try {
         const result: GitRunStackedActionResult = await client.git.runStackedAction(
@@ -289,6 +304,7 @@ export function GitScreen() {
           }
         );
         await git.refresh();
+        // Dedicated toast below — avoid double-firing via StatusToastBridge.
         logStatus("git", "success", result.toast.title, result.toast.description, {
           environmentId,
           inProgress: false,
@@ -318,6 +334,7 @@ export function GitScreen() {
           environmentId,
           phase: "error",
           inProgress: false,
+          toast: false,
         });
         toast.show({
           variant: "danger",
@@ -427,11 +444,30 @@ export function GitScreen() {
             >
               <AppIcon name="back" size={21} color={theme.foreground} />
             </HeaderBubble>
-            <HeaderBubble
-              subtitle={status?.refName ?? thread?.branch ?? shell?.branch ?? "Checking branch..."}
-              title="Source control"
-              variant="title"
-            />
+            <HeaderBubble variant="title">
+              <View style={{ gap: 2, minWidth: 0 }}>
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    color: theme.foreground,
+                    fontSize: 15,
+                    fontWeight: "600",
+                    lineHeight: 17,
+                  }}
+                >
+                  Source control
+                </Text>
+                <View className="flex-row items-center gap-1.5" style={{ minWidth: 0 }}>
+                  <ConnectionStatusIndicator status={connectionStatus} compact />
+                  <Text
+                    numberOfLines={1}
+                    style={{ color: theme.muted, fontSize: 10, lineHeight: 12, flexShrink: 1 }}
+                  >
+                    · {status?.refName ?? thread?.branch ?? shell?.branch ?? "Checking branch..."}
+                  </Text>
+                </View>
+              </View>
+            </HeaderBubble>
             <HeaderSpacer />
             <HeaderBubble
               accessibilityLabel="Refresh git status"
