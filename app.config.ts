@@ -15,6 +15,7 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: "com.t3tools.t3code.mobile",
+    icon: "./assets/icon.png",
     infoPlist: {
       NSAppTransportSecurity: {
         NSAllowsArbitraryLoads: true,
@@ -27,17 +28,23 @@ const config: ExpoConfig = {
   android: {
     package: "com.t3tools.t3code.mobile",
     softwareKeyboardLayoutMode: "resize",
+    icon: "./assets/icon.png",
     adaptiveIcon: {
-      foregroundImage: "./assets/icon.png",
+      foregroundImage: "./assets/images/adaptive-icon.png",
       backgroundColor: "#09090b",
     },
     predictiveBackGestureEnabled: false,
+  },
+  web: {
+    favicon: "./assets/images/favicon.png",
   },
   plugins: [
     "expo-router",
     [
       "expo-notifications",
       {
+        // Monochrome status-bar glyph; keep color for the accent tint.
+        icon: "./assets/images/icon-192.png",
         color: "#0ea5e9",
         defaultChannel: "agent-events",
       },
