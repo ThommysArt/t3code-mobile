@@ -1,3 +1,4 @@
+import { canSettle, effectiveSettled } from "@t3tools/client-runtime";
 import type {
   ModelSelection,
   OrchestrationCheckpointSummary,
@@ -29,7 +30,9 @@ import { useChromeTheme } from "@/components/chrome/useChromeTheme";
 import { FloatingBottomChrome } from "@/components/FloatingBottomChrome";
 import { ProviderIcon } from "@/components/ProviderIcon";
 import { Screen } from "@/components/Screen";
+import { useThreadListActions } from "@/features/home/useThreadListActions";
 import { loadThreadDraft, saveThreadDraft } from "@/runtime/db";
+import { usePreferences } from "@/runtime/PreferencesProvider";
 import { useThread } from "@/runtime/useThread";
 import { estimatedComposerChromeHeight } from "@/utils/bottomChrome";
 import { relativeTime } from "@/utils/time";
@@ -470,6 +473,8 @@ export function ThreadScreen() {
     thread,
     updateModelSelection,
   } = useThread(environmentId, threadId);
+  const { preferences } = usePreferences();
+  const { settleThread, unsettleThread, environmentSupportsSettlement } = useThreadListActions();
   const [draft, setDraft] = useState("");
   const [selectedAttachments, setSelectedAttachments] = useState<
     readonly SelectedImageAttachment[]
@@ -747,6 +752,23 @@ export function ThreadScreen() {
 
   const threadTitle = thread?.title ?? shell?.title ?? "Thread";
   const threadSubtitle = `${statusLabel} · ${thread?.branch ?? shell?.branch ?? "main"}`;
+  const settlementSupported =
+    shell != null && environmentSupportsSettlement(shell.environmentId);
+  const nowIso = new Date().toISOString();
+  const threadIsSettled =
+    shell != null &&
+    settlementSupported &&
+    effectiveSettled(shell, {
+      now: nowIso,
+      autoSettleAfterDays: preferences.autoSettleAfterDays,
+    });
+  const canSettleThread =
+    shell != null && settlementSupported && !threadIsSettled && canSettle(shell, { now: nowIso });
+  const showSettleAction =
+    preferences.threadListV2Enabled &&
+    shell != null &&
+    settlementSupported &&
+    (threadIsSettled || canSettleThread);
 
   return (
     <Screen edges={["left", "right"]}>
@@ -759,6 +781,23 @@ export function ThreadScreen() {
             </HeaderBubble>
             <HeaderBubble subtitle={threadSubtitle} title={threadTitle} variant="title" />
             <HeaderSpacer />
+            {showSettleAction ? (
+              <HeaderBubble
+                accessibilityLabel={threadIsSettled ? "Un-settle thread" : "Settle thread"}
+                onPress={() => {
+                  if (!shell) return;
+                  if (threadIsSettled) void unsettleThread(shell);
+                  else void settleThread(shell);
+                }}
+                variant="icon"
+              >
+                <AppIcon
+                  name={threadIsSettled ? "refresh" : "check"}
+                  size={20}
+                  color={theme.foreground}
+                />
+              </HeaderBubble>
+            ) : null}
             <HeaderBubble
               accessibilityLabel="Open source control"
               onPress={() =>

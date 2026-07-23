@@ -10,6 +10,7 @@ import {
   type LayoutChangeEvent,
   Pressable,
   ScrollView,
+  StyleSheet,
   Text,
   TextInput,
   useColorScheme,
@@ -120,85 +121,98 @@ function ThreadRow(props: {
   const muted = props.isDark ? "#737373" : "#737373";
   const foreground = props.isDark ? "#f5f5f5" : "#171717";
   const separator = props.isDark ? "#282828" : "#dedede";
-  const iconColor =
-    props.thread.session?.status === "running" || props.thread.session?.status === "starting"
-      ? "#2563eb"
-      : props.isDark
-        ? "#a3a3a3"
-        : "#737373";
+  const isWorking =
+    props.thread.session?.status === "running" || props.thread.session?.status === "starting";
+  const iconColor = isWorking ? "#38bdf8" : props.isDark ? "#a3a3a3" : "#737373";
 
   return (
     <Pressable onPress={props.onPress} style={({ pressed }) => ({ opacity: pressed ? 0.66 : 1 })}>
       <View
         style={{
-          minHeight: 62,
+          minHeight: 54,
           flexDirection: "row",
-          gap: 9,
+          gap: 8,
           paddingHorizontal: 12,
-          paddingVertical: 10,
-          borderBottomWidth: props.isLast ? 0 : 1,
+          paddingVertical: 9,
+          borderBottomWidth: props.isLast ? 0 : StyleSheet.hairlineWidth,
           borderBottomColor: separator,
         }}
       >
         <View
           style={{
-            width: 32,
-            height: 32,
+            width: 28,
+            height: 28,
             marginTop: 1,
             alignItems: "center",
             justifyContent: "center",
-            borderRadius: 10,
-            backgroundColor:
-              props.thread.session?.status === "running" ||
-              props.thread.session?.status === "starting"
-                ? props.isDark
-                  ? "#172554"
-                  : "#dbeafe"
-                : props.isDark
-                  ? "#242424"
-                  : "#eeeeef",
+            borderRadius: 8,
+            backgroundColor: isWorking
+              ? props.isDark
+                ? "#0c1a2e"
+                : "#e0f2fe"
+              : props.isDark
+                ? "#1c1c1c"
+                : "#f0f0f1",
           }}
         >
-          <AppIcon name="branch" size={15} color={iconColor} strokeWidth={1.8} />
+          {isWorking ? (
+            <ActivityIndicator size="small" color={iconColor} style={{ transform: [{ scale: 0.75 }] }} />
+          ) : (
+            <AppIcon name="branch" size={13} color={iconColor} strokeWidth={1.8} />
+          )}
         </View>
-        <View style={{ flex: 1, gap: 3 }}>
+        <View style={{ flex: 1, gap: 2 }}>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
             <Text
               style={{
                 flex: 1,
                 color: foreground,
-                fontSize: 14,
-                fontWeight: "700",
-                lineHeight: 20,
+                fontSize: 13,
+                fontWeight: "600",
+                lineHeight: 18,
               }}
               numberOfLines={1}
             >
               {props.thread.title}
             </Text>
-            <View
-              style={{
-                borderRadius: 999,
-                paddingHorizontal: 6,
-                paddingVertical: 2,
-                backgroundColor: tone.backgroundColor,
-              }}
-            >
+            {isWorking ? (
               <Text style={{ color: tone.foregroundColor, fontSize: 10, fontWeight: "600" }}>
                 {tone.label}
               </Text>
-            </View>
-            <Text style={{ width: 30, color: muted, fontSize: 11, textAlign: "right" }}>
+            ) : (
+              <View
+                style={{
+                  borderRadius: 999,
+                  paddingHorizontal: 5,
+                  paddingVertical: 1,
+                  backgroundColor: tone.backgroundColor,
+                }}
+              >
+                <Text style={{ color: tone.foregroundColor, fontSize: 9, fontWeight: "600" }}>
+                  {tone.label}
+                </Text>
+              </View>
+            )}
+            <Text
+              style={{
+                minWidth: 28,
+                color: muted,
+                fontSize: 10,
+                fontFamily: GEIST_MONO,
+                textAlign: "right",
+              }}
+            >
               {relativeTime(getThreadInitiatedAt(props.thread))}
             </Text>
           </View>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-            <AppIcon name="branch" size={11} color={muted} strokeWidth={1.7} />
+            <AppIcon name="branch" size={10} color={muted} strokeWidth={1.7} />
             <Text
               style={{
                 flex: 1,
                 color: muted,
                 fontFamily: GEIST_MONO,
-                fontSize: 11,
+                fontSize: 10,
               }}
               numberOfLines={1}
             >
@@ -323,6 +337,32 @@ export function HomeScreen() {
     setSettledVisibleCount(THREAD_LIST_V2_SETTLED_INITIAL_COUNT);
   }, [search, threadListV2Enabled]);
 
+  const [changeRequestStateByKey, setChangeRequestStateByKey] = useState<
+    ReadonlyMap<string, "open" | "closed" | "merged">
+  >(() => new Map());
+
+  const handleChangeRequestState = useCallback(
+    (threadKey: string, state: "open" | "closed" | "merged" | null) => {
+      setChangeRequestStateByKey((current) => {
+        const existing = current.get(threadKey) ?? null;
+        if (existing === state) return current;
+        const next = new Map(current);
+        if (state === null) next.delete(threadKey);
+        else next.set(threadKey, state);
+        return next;
+      });
+    },
+    []
+  );
+
+  const serverConfigByEnvironmentId = useMemo(() => {
+    const map = new Map<EnvironmentId, (typeof environments)[number]["serverConfig"]>();
+    for (const environment of environments) {
+      map.set(environment.connection.environmentId, environment.serverConfig);
+    }
+    return map;
+  }, [environments]);
+
   const threadListV2Layout = useMemo(() => {
     if (!threadListV2Enabled) return { items: [], hiddenSettledCount: 0 };
     return buildThreadListV2Items({
@@ -330,11 +370,13 @@ export function HomeScreen() {
       environmentId: null,
       searchQuery: search,
       settlementEnvironmentIds,
+      changeRequestStateByKey,
       autoSettleAfterDays: preferences.autoSettleAfterDays,
       settledLimit: settledVisibleCount,
       now: nowTick,
     });
   }, [
+    changeRequestStateByKey,
     nowTick,
     preferences.autoSettleAfterDays,
     search,
@@ -588,6 +630,9 @@ export function HomeScreen() {
                     environmentLabel={
                       environmentLabelById.get(item.thread.environmentId) ?? null
                     }
+                    serverConfig={
+                      serverConfigByEnvironmentId.get(item.thread.environmentId) ?? null
+                    }
                     settlementSupported={settlementEnvironmentIds.has(item.thread.environmentId)}
                     onSelectThread={openThread}
                     onSettleThread={(thread) => {
@@ -596,6 +641,7 @@ export function HomeScreen() {
                     onUnsettleThread={(thread) => {
                       void unsettleThread(thread);
                     }}
+                    onChangeRequestState={handleChangeRequestState}
                   />
                 );
               })}
@@ -636,12 +682,12 @@ export function HomeScreen() {
                       paddingHorizontal: 6,
                     }}
                   >
-                    <AppIcon name="folder" size={14} color={muted} />
+                    <AppIcon name="folder" size={12} color={muted} />
                     <Text
                       style={{
                         flex: 1,
                         color: muted,
-                        fontSize: 11,
+                        fontSize: 10,
                         fontWeight: "500",
                         letterSpacing: 0.1,
                         fontFamily: GEIST_MONO,

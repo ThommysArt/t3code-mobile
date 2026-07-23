@@ -71,21 +71,23 @@ export function HeaderBubble(props: {
       props.children
     );
 
-  const bubble = (
-    <View
-      style={StyleSheet.flatten([
-        shellStyle,
-        {
+  // Titles sit on the progressive blur already — no card chrome.
+  // Icon/action bubbles keep a light surface so they remain tappable targets.
+  const chromeStyle: ViewStyle =
+    variant === "title"
+      ? {
+          backgroundColor: "transparent",
+          borderWidth: 0,
+        }
+      : {
           backgroundColor: theme.isDark ? "rgba(23,23,23,0.94)" : "rgba(255,255,255,0.94)",
           borderColor: theme.border,
           borderRadius: 20,
           borderWidth: StyleSheet.hairlineWidth,
-        },
-        props.style,
-      ])}
-    >
-      {content}
-    </View>
+        };
+
+  const bubble = (
+    <View style={StyleSheet.flatten([shellStyle, chromeStyle, props.style])}>{content}</View>
   );
 
   if (!props.onPress) return bubble;

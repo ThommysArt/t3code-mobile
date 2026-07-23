@@ -2,13 +2,32 @@ import type {
   EnvironmentScopedProjectShell,
   EnvironmentScopedThreadShell,
 } from "@t3tools/client-runtime";
-import { memo, useCallback } from "react";
-import { Alert, Pressable, StyleSheet, Text, useColorScheme, View } from "react-native";
+import type { ServerConfig } from "@t3tools/contracts";
+import { memo, useCallback, useEffect } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  StyleSheet,
+  Text,
+  useColorScheme,
+  View,
+} from "react-native";
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from "react-native-reanimated";
 
 import { AppIcon } from "@/components/AppIcon";
+import { ProviderIcon } from "@/components/ProviderIcon";
+import { useThreadPr } from "@/runtime/useThreadPr";
 import { GEIST_MONO } from "@/theme/fonts";
 import { relativeTime } from "@/utils/time";
 
+import { resolveThreadProvider } from "./threadProvider";
 import { resolveThreadListV2Status, type ThreadListV2Status } from "./threadListV2";
 
 const STATUS_META: Partial<
@@ -22,6 +41,40 @@ const STATUS_META: Partial<
 
 function threadTimeLabel(thread: EnvironmentScopedThreadShell): string {
   return relativeTime(thread.latestUserMessageAt ?? thread.updatedAt ?? thread.createdAt);
+}
+
+function WorkingStatusLabel(props: { readonly color: string; readonly label: string }) {
+  const progress = useSharedValue(0.45);
+
+  useEffect(() => {
+    progress.value = withRepeat(
+      withTiming(1, { duration: 900, easing: Easing.inOut(Easing.quad) }),
+      -1,
+      true
+    );
+  }, [progress]);
+
+  const pulseStyle = useAnimatedStyle(() => ({
+    opacity: progress.value,
+  }));
+
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+      <ActivityIndicator size="small" color={props.color} style={{ transform: [{ scale: 0.7 }] }} />
+      <Animated.Text
+        style={[
+          {
+            color: props.color,
+            fontSize: 10,
+            fontWeight: "600",
+          },
+          pulseStyle,
+        ]}
+      >
+        {props.label}
+      </Animated.Text>
+    </View>
+  );
 }
 
 export const ThreadListV2SettledDivider = memo(function ThreadListV2SettledDivider(props: {
@@ -54,10 +107,15 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   readonly showSettledDivider: boolean;
   readonly project: EnvironmentScopedProjectShell | null;
   readonly environmentLabel: string | null;
+  readonly serverConfig: ServerConfig | null;
   readonly settlementSupported: boolean;
   readonly onSelectThread: (thread: EnvironmentScopedThreadShell) => void;
   readonly onSettleThread: (thread: EnvironmentScopedThreadShell) => void;
   readonly onUnsettleThread: (thread: EnvironmentScopedThreadShell) => void;
+  readonly onChangeRequestState?: (
+    threadKey: string,
+    state: "open" | "closed" | "merged" | null
+  ) => void;
 }) {
   const isDark = useColorScheme() === "dark";
   const {
@@ -65,13 +123,14 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
     variant,
     project,
     environmentLabel,
+    serverConfig,
     settlementSupported,
     onSelectThread,
     onSettleThread,
     onUnsettleThread,
+    onChangeRequestState,
   } = props;
 
-  // Keep cards close to the screen so the list reads as one surface, not a stack of tiles.
   const background = isDark ? "#090909" : "#f4f4f5";
   const foreground = isDark ? "#f5f5f5" : "#171717";
   const muted = isDark ? "#858585" : "#737373";
@@ -82,6 +141,15 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
   const statusMeta = STATUS_META[status];
   const timeLabel = threadTimeLabel(thread);
   const statusColor = statusMeta ? (isDark ? statusMeta.dark : statusMeta.light) : muted;
+  const provider = resolveThreadProvider(thread, serverConfig);
+  const pr = useThreadPr(thread, project?.workspaceRoot ?? null, isDark);
+
+  useEffect(() => {
+    onChangeRequestState?.(
+      `${thread.environmentId}:${thread.id}`,
+      pr?.state ?? null
+    );
+  }, [onChangeRequestState, pr?.state, thread.environmentId, thread.id]);
 
   const openLifecycleMenu = useCallback(() => {
     const buttons: {
@@ -114,24 +182,14 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
     variant,
   ]);
 
-  const statusBarColor =
-    status === "working"
-      ? isDark
-        ? "#0ea5e9"
-        : "#38bdf8"
-      : status === "approval"
-        ? isDark
-          ? "#f59e0b"
-          : "#fbbf24"
-        : status === "failed"
-          ? isDark
-            ? "#ef4444"
-            : "#f87171"
-          : status === "input"
-            ? isDark
-              ? "#6366f1"
-              : "#818cf8"
-            : "transparent";
+  const statusNode =
+    status === "working" && statusMeta ? (
+      <WorkingStatusLabel color={statusColor} label={statusMeta.label} />
+    ) : (
+      <Text style={{ color: statusColor, fontSize: 10, fontWeight: "600" }}>
+        {statusMeta?.label ?? timeLabel}
+      </Text>
+    );
 
   return (
     <>
@@ -140,7 +198,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
         <Pressable
           accessibilityHint={
             settlementSupported
-              ? "Opens the thread. Long-press to settle."
+              ? "Opens the thread. Long-press for settle and other actions."
               : "Opens the thread."
           }
           accessibilityLabel={thread.title}
@@ -157,7 +215,6 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
             marginBottom: 6,
           })}
         >
-          <View style={{ height: 2, backgroundColor: statusBarColor }} />
           <View style={{ paddingHorizontal: 12, paddingVertical: 10, gap: 4 }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
               <View
@@ -185,9 +242,7 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
               >
                 {project?.title ?? "Project"}
               </Text>
-              <Text style={{ color: statusColor, fontSize: 10, fontWeight: "600" }}>
-                {statusMeta?.label ?? timeLabel}
-              </Text>
+              {statusNode}
             </View>
             <Text
               style={{
@@ -200,13 +255,13 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
             >
               {thread.title}
             </Text>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
               {thread.branch ? (
                 <>
                   <AppIcon name="branch" size={10} color={muted} strokeWidth={1.7} />
                   <Text
                     style={{
-                      flex: 1,
+                      flexShrink: 1,
                       color: muted,
                       fontFamily: GEIST_MONO,
                       fontSize: 10,
@@ -218,13 +273,35 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
                   </Text>
                 </>
               ) : environmentLabel ? (
-                <Text style={{ flex: 1, color: muted, fontSize: 10 }} numberOfLines={1}>
+                <Text
+                  style={{ flexShrink: 1, color: muted, fontSize: 10 }}
+                  numberOfLines={1}
+                >
                   {environmentLabel}
                 </Text>
               ) : (
                 <View style={{ flex: 1 }} />
               )}
-              {statusMeta ? (
+              <View style={{ flex: 1 }} />
+              {pr ? (
+                <Text
+                  accessibilityLabel={pr.accessibilityLabel}
+                  style={{
+                    color: pr.color,
+                    fontFamily: GEIST_MONO,
+                    fontSize: 10,
+                    fontWeight: "600",
+                  }}
+                >
+                  #{pr.label}
+                </Text>
+              ) : null}
+              {provider ? (
+                <View style={{ opacity: 0.75 }}>
+                  <ProviderIcon driver={provider.driver} label={provider.label} size={13} />
+                </View>
+              ) : null}
+              {statusMeta && status !== "working" ? (
                 <Text style={{ color: muted, fontSize: 10 }}>{timeLabel}</Text>
               ) : null}
             </View>
@@ -261,6 +338,11 @@ export const ThreadListV2Row = memo(function ThreadListV2Row(props: {
           >
             {thread.title}
           </Text>
+          {provider ? (
+            <View style={{ opacity: 0.55 }}>
+              <ProviderIcon driver={provider.driver} label={provider.label} size={12} />
+            </View>
+          ) : null}
           <Text
             style={{
               color: isDark ? "#525252" : "#a3a3a3",

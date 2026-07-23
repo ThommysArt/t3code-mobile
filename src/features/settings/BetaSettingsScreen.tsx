@@ -75,61 +75,63 @@ export function BetaSettingsScreen() {
                       description="Any real activity un-settles a thread automatically on a supporting server."
                       layout="stacked"
                       control={
-                        <View className="flex-row items-center gap-2">
-                          <TextInput
-                            keyboardType="number-pad"
-                            value={autoSettleDraft}
-                            onChangeText={(value) => {
-                              setAutoSettleDraft(value);
-                              const parsed = Number(value);
-                              if (
-                                Number.isInteger(parsed) &&
-                                parsed >= AUTO_SETTLE_MIN_DAYS &&
-                                parsed <= AUTO_SETTLE_MAX_DAYS
-                              ) {
-                                void updatePreferences({ autoSettleAfterDays: parsed });
-                              }
-                            }}
-                            onBlur={() => {
-                              setAutoSettleDraft(
-                                String(
-                                  preferences.autoSettleAfterDays ?? AUTO_SETTLE_DEFAULT_DAYS
-                                )
-                              );
-                            }}
-                            className="min-w-[72px] rounded-xl border border-border bg-default px-3 py-2 text-center text-sm text-foreground"
-                            accessibilityLabel="Days of inactivity before auto-settle"
-                          />
-                          <Text className="text-sm text-muted">days</Text>
+                        <View className="w-full gap-3 pt-1">
+                          <View className="flex-row items-center gap-2">
+                            <TextInput
+                              keyboardType="number-pad"
+                              value={autoSettleDraft}
+                              onChangeText={(value) => {
+                                setAutoSettleDraft(value);
+                                const parsed = Number(value);
+                                if (
+                                  Number.isInteger(parsed) &&
+                                  parsed >= AUTO_SETTLE_MIN_DAYS &&
+                                  parsed <= AUTO_SETTLE_MAX_DAYS
+                                ) {
+                                  void updatePreferences({ autoSettleAfterDays: parsed });
+                                }
+                              }}
+                              onBlur={() => {
+                                setAutoSettleDraft(
+                                  String(
+                                    preferences.autoSettleAfterDays ?? AUTO_SETTLE_DEFAULT_DAYS
+                                  )
+                                );
+                              }}
+                              className="min-w-[72px] rounded-xl border border-border bg-default px-3 py-2 text-center text-sm text-foreground"
+                              accessibilityLabel="Days of inactivity before auto-settle"
+                            />
+                            <Text className="text-sm text-muted">days</Text>
+                          </View>
+                          <View className="flex-row flex-wrap gap-2">
+                            {[1, 3, 7, 14, 30].map((days) => (
+                              <Pressable
+                                key={days}
+                                onPress={() => {
+                                  setAutoSettleDraft(String(days));
+                                  void updatePreferences({ autoSettleAfterDays: days });
+                                }}
+                                className={`rounded-full px-3 py-1.5 ${
+                                  preferences.autoSettleAfterDays === days
+                                    ? "bg-accent"
+                                    : "bg-default"
+                                }`}
+                              >
+                                <Text
+                                  className={`text-xs font-semibold ${
+                                    preferences.autoSettleAfterDays === days
+                                      ? "text-accent-foreground"
+                                      : "text-foreground"
+                                  }`}
+                                >
+                                  {days}d
+                                </Text>
+                              </Pressable>
+                            ))}
+                          </View>
                         </View>
                       }
                     />
-                    <View className="flex-row flex-wrap gap-2 px-1 pt-1">
-                      {[1, 3, 7, 14, 30].map((days) => (
-                        <Pressable
-                          key={days}
-                          onPress={() => {
-                            setAutoSettleDraft(String(days));
-                            void updatePreferences({ autoSettleAfterDays: days });
-                          }}
-                          className={`rounded-full px-3 py-1.5 ${
-                            preferences.autoSettleAfterDays === days
-                              ? "bg-accent"
-                              : "bg-default"
-                          }`}
-                        >
-                          <Text
-                            className={`text-xs font-semibold ${
-                              preferences.autoSettleAfterDays === days
-                                ? "text-accent-foreground"
-                                : "text-foreground"
-                            }`}
-                          >
-                            {days}d
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </View>
                   </>
                 ) : null}
               </>

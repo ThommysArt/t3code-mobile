@@ -99,7 +99,7 @@ export function SettingsSection(props: {
         </Text>
         {props.action}
       </View>
-      <View className="overflow-hidden rounded-[20px] border border-border bg-surface">
+      <View className="overflow-hidden rounded-2xl border border-border bg-surface">
         {props.children}
       </View>
     </View>

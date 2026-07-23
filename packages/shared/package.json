@@ -51,6 +51,12 @@
       "react-native": "./src/orchestrationTiming.ts",
       "import": "./src/orchestrationTiming.ts",
       "default": "./src/orchestrationTiming.ts"
+    },
+    "./sourceControl": {
+      "types": "./src/sourceControl.ts",
+      "react-native": "./src/sourceControl.ts",
+      "import": "./src/sourceControl.ts",
+      "default": "./src/sourceControl.ts"
     }
   },
   "dependencies": {
