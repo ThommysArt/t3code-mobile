@@ -2,6 +2,7 @@ import type {
   EnvironmentScopedProjectShell,
   EnvironmentScopedThreadShell,
 } from "@t3tools/client-runtime";
+import type { EnvironmentId } from "@t3tools/contracts";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -27,6 +28,14 @@ import { usePreferences } from "@/runtime/PreferencesProvider";
 import { compareThreadsByInitiatedAt, getThreadInitiatedAt } from "@/runtime/catalog";
 import { logStatus } from "@/runtime/statusLog";
 import { relativeTime } from "@/utils/time";
+
+import { ThreadListV2Row } from "./ThreadListV2Items";
+import {
+  buildThreadListV2Items,
+  THREAD_LIST_V2_SETTLED_INITIAL_COUNT,
+  THREAD_LIST_V2_SETTLED_PAGE_COUNT,
+} from "./threadListV2";
+import { useThreadListActions } from "./useThreadListActions";
 
 interface ProjectGroup {
   readonly key: string;
@@ -207,9 +216,14 @@ export function HomeScreen() {
   const background = isDark ? "#090909" : "#f4f4f5";
   const { environments, isBootstrapping, projects, reloadThreads, threads } = useEnvironments();
   const { preferences } = usePreferences();
+  const { settleThread, unsettleThread, environmentSupportsSettlement } = useThreadListActions();
+  const threadListV2Enabled = preferences.threadListV2Enabled;
   const collapsedThreadLimit = preferences.sidebarThreadPreviewCount;
   const [search, setSearch] = useState("");
   const [expandedGroups, setExpandedGroups] = useState<ReadonlySet<string>>(new Set());
+  const [settledVisibleCount, setSettledVisibleCount] = useState(
+    THREAD_LIST_V2_SETTLED_INITIAL_COUNT
+  );
   const [bottomChromeHeight, setBottomChromeHeight] = useState(() =>
     estimatedSearchChromeHeight(insets)
   );
@@ -217,11 +231,17 @@ export function HomeScreen() {
   const theme = useChromeTheme();
   const hasLoggedViewportRef = useRef(false);
 
+  const projectByKey = useMemo(
+    () =>
+      new Map(
+        projects.map((project) => [scopedProjectKey(project.environmentId, project.id), project])
+      ),
+    [projects]
+  );
+
   const groups = useMemo<readonly ProjectGroup[]>(() => {
+    if (threadListV2Enabled) return [];
     const query = search.trim().toLowerCase();
-    const projectByKey = new Map(
-      projects.map((project) => [scopedProjectKey(project.environmentId, project.id), project])
-    );
     const grouped = new Map<string, EnvironmentScopedThreadShell[]>(
       projects.map((project) => [
         scopedProjectKey(project.environmentId, project.id),
@@ -261,7 +281,62 @@ export function HomeScreen() {
         const rightDate = right.threads[0] ? getThreadInitiatedAt(right.threads[0]) : "";
         return rightDate.localeCompare(leftDate);
       });
-  }, [projects, search, threads]);
+  }, [projectByKey, projects, search, threadListV2Enabled, threads]);
+
+  const settlementEnvironmentIds = useMemo(() => {
+    const ids = new Set<EnvironmentId>();
+    for (const environment of environments) {
+      if (environmentSupportsSettlement(environment.connection.environmentId)) {
+        ids.add(environment.connection.environmentId);
+      }
+    }
+    return ids;
+  }, [environmentSupportsSettlement, environments]);
+
+  const multiEnvironment = environments.length > 1;
+  const environmentLabelById = useMemo(() => {
+    const labels = new Map<EnvironmentId, string>();
+    if (!multiEnvironment) return labels;
+    for (const environment of environments) {
+      labels.set(environment.connection.environmentId, environment.connection.label);
+    }
+    return labels;
+  }, [environments, multiEnvironment]);
+
+  // Recompute partition periodically so inactivity auto-settle can tick without
+  // requiring a shell event.
+  const [nowTick, setNowTick] = useState(() => new Date().toISOString());
+  useEffect(() => {
+    if (!threadListV2Enabled) return;
+    const interval = setInterval(() => setNowTick(new Date().toISOString()), 60_000);
+    return () => clearInterval(interval);
+  }, [threadListV2Enabled]);
+
+  useEffect(() => {
+    if (!threadListV2Enabled) return;
+    setSettledVisibleCount(THREAD_LIST_V2_SETTLED_INITIAL_COUNT);
+  }, [search, threadListV2Enabled]);
+
+  const threadListV2Layout = useMemo(() => {
+    if (!threadListV2Enabled) return { items: [], hiddenSettledCount: 0 };
+    return buildThreadListV2Items({
+      threads,
+      environmentId: null,
+      searchQuery: search,
+      settlementEnvironmentIds,
+      autoSettleAfterDays: preferences.autoSettleAfterDays,
+      settledLimit: settledVisibleCount,
+      now: nowTick,
+    });
+  }, [
+    nowTick,
+    preferences.autoSettleAfterDays,
+    search,
+    settledVisibleCount,
+    settlementEnvironmentIds,
+    threadListV2Enabled,
+    threads,
+  ]);
 
   const readyCount = environments.filter(
     (environment) => environment.connectionState === "ready"
@@ -288,31 +363,50 @@ export function HomeScreen() {
   const connectionColor =
     readyCount > 0 ? "#22c55e" : hasHttpData ? "#f59e0b" : isConnecting ? "#60a5fa" : "#737373";
 
+  const catalogEmpty = threadListV2Enabled
+    ? threadListV2Layout.items.length === 0
+    : groups.length === 0;
+
   useEffect(() => {
     if (environments.length === 0) return;
     logStatus(
       "shell",
       "success",
       "Home catalog updated",
-      `${threads.length} visible threads in ${groups.length} project groups`,
+      threadListV2Enabled
+        ? `${threads.length} visible threads (list v2)`
+        : `${threads.length} visible threads in ${groups.length} project groups`,
       { toast: false }
     );
-  }, [environments.length, groups.length, threads.length]);
+  }, [environments.length, groups.length, threadListV2Enabled, threads.length]);
 
   const handleCatalogLayout = useCallback(
     (event: LayoutChangeEvent) => {
-      if (groups.length === 0 || hasLoggedViewportRef.current) return;
+      if (catalogEmpty || hasLoggedViewportRef.current) return;
       hasLoggedViewportRef.current = true;
       const { height, width } = event.nativeEvent.layout;
       logStatus(
         "shell",
         height > 0 && width > 0 ? "success" : "danger",
         "Thread list viewport ready",
-        `${Math.round(width)}x${Math.round(height)} for ${groups.length} project groups`,
+        `${Math.round(width)}x${Math.round(height)}`,
         { toast: false }
       );
     },
-    [groups.length]
+    [catalogEmpty]
+  );
+
+  const openThread = useCallback(
+    (thread: EnvironmentScopedThreadShell) => {
+      router.push({
+        pathname: "/threads/[environmentId]/[threadId]",
+        params: {
+          environmentId: thread.environmentId,
+          threadId: thread.id,
+        },
+      });
+    },
+    [router]
   );
 
   return (
@@ -451,7 +545,7 @@ export function HomeScreen() {
                 <Text className="font-semibold text-accent-foreground">Add server</Text>
               </Pressable>
             </View>
-          ) : groups.length === 0 ? (
+          ) : catalogEmpty ? (
             <View className="items-center gap-3 rounded-3xl border border-border bg-surface px-6 py-10">
               <Text className="text-lg font-bold text-foreground">
                 {search.trim() ? "No matching threads" : "No threads found"}
@@ -468,6 +562,53 @@ export function HomeScreen() {
                 >
                   <AppIcon name="refresh" size={16} color={isDark ? "#f5f5f5" : "#262626"} />
                   <Text className="text-sm font-semibold text-foreground">Refresh</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : threadListV2Enabled ? (
+            <View style={{ gap: 0 }}>
+              {threadListV2Layout.items.map((item) => {
+                const project =
+                  projectByKey.get(
+                    scopedProjectKey(item.thread.environmentId, item.thread.projectId)
+                  ) ?? null;
+                return (
+                  <ThreadListV2Row
+                    key={`${item.thread.environmentId}:${item.thread.id}`}
+                    thread={item.thread}
+                    variant={item.variant}
+                    showSettledDivider={item.showSettledDivider}
+                    project={project}
+                    environmentLabel={
+                      environmentLabelById.get(item.thread.environmentId) ?? null
+                    }
+                    settlementSupported={settlementEnvironmentIds.has(item.thread.environmentId)}
+                    onSelectThread={openThread}
+                    onSettleThread={(thread) => {
+                      void settleThread(thread);
+                    }}
+                    onUnsettleThread={(thread) => {
+                      void unsettleThread(thread);
+                    }}
+                  />
+                );
+              })}
+              {threadListV2Layout.hiddenSettledCount > 0 ? (
+                <Pressable
+                  accessibilityLabel={`Show ${Math.min(
+                    threadListV2Layout.hiddenSettledCount,
+                    THREAD_LIST_V2_SETTLED_PAGE_COUNT
+                  )} more settled threads`}
+                  onPress={() =>
+                    setSettledVisibleCount(
+                      (current) => current + THREAD_LIST_V2_SETTLED_PAGE_COUNT
+                    )
+                  }
+                  className="mt-2 items-center rounded-2xl border border-border bg-surface px-4 py-3"
+                >
+                  <Text className="text-sm font-semibold text-foreground">
+                    Show more ({threadListV2Layout.hiddenSettledCount} settled hidden)
+                  </Text>
                 </Pressable>
               ) : null}
             </View>
@@ -555,15 +696,7 @@ export function HomeScreen() {
                           thread={thread}
                           isDark={isDark}
                           isLast={index === visibleThreads.length - 1}
-                          onPress={() =>
-                            router.push({
-                              pathname: "/threads/[environmentId]/[threadId]",
-                              params: {
-                                environmentId: thread.environmentId,
-                                threadId: thread.id,
-                              },
-                            })
-                          }
+                          onPress={() => openThread(thread)}
                         />
                       ))
                     ) : (

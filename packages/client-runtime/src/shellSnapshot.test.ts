@@ -33,6 +33,8 @@ describe("HTTP shell snapshot conversion", () => {
           createdAt: "2026-06-10T12:00:00.000Z",
           updatedAt: "2026-06-11T12:00:00.000Z",
           archivedAt: null,
+          settledOverride: null,
+          settledAt: null,
           deletedAt: null,
           messages: [
             {

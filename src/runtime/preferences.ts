@@ -20,6 +20,16 @@ export interface MobilePreferences {
   readonly sidebarThreadPreviewCount: SidebarThreadPreviewCount;
   readonly minimalLogging: boolean;
   readonly defaultThreadModelSelection: ModelSelection | null;
+  /**
+   * Device-local mirror of the web beta's `sidebarV2Enabled`. Mobile has no
+   * client-settings sync, so the flat v2 thread list is opted into per device.
+   */
+  readonly threadListV2Enabled: boolean;
+  /**
+   * Days of inactivity before auto-settle when Thread List v2 is on.
+   * `null` disables inactivity auto-settle (explicit settle + PR still apply).
+   */
+  readonly autoSettleAfterDays: number | null;
 }
 
 export const DEFAULT_MOBILE_PREFERENCES: MobilePreferences = {
@@ -29,6 +39,8 @@ export const DEFAULT_MOBILE_PREFERENCES: MobilePreferences = {
   sidebarThreadPreviewCount: DEFAULT_SIDEBAR_THREAD_PREVIEW_COUNT,
   minimalLogging: false,
   defaultThreadModelSelection: null,
+  threadListV2Enabled: false,
+  autoSettleAfterDays: DEFAULT_CLIENT_SETTINGS.sidebarAutoSettleAfterDays,
 };
 
 type PreferencesListener = () => void;
@@ -53,6 +65,16 @@ function normalizePreferences(
       ? raw.timestampFormat
       : DEFAULT_MOBILE_PREFERENCES.timestampFormat;
 
+  const autoSettleAfterDays =
+    raw.autoSettleAfterDays === null
+      ? null
+      : typeof raw.autoSettleAfterDays === "number" &&
+          Number.isInteger(raw.autoSettleAfterDays) &&
+          raw.autoSettleAfterDays >= 1 &&
+          raw.autoSettleAfterDays <= 90
+        ? raw.autoSettleAfterDays
+        : DEFAULT_MOBILE_PREFERENCES.autoSettleAfterDays;
+
   return {
     timestampFormat,
     confirmThreadArchive:
@@ -64,6 +86,8 @@ function normalizePreferences(
         : DEFAULT_MOBILE_PREFERENCES.sidebarThreadPreviewCount,
     minimalLogging: raw.minimalLogging ?? DEFAULT_MOBILE_PREFERENCES.minimalLogging,
     defaultThreadModelSelection: normalizeModelSelection(raw.defaultThreadModelSelection),
+    threadListV2Enabled: raw.threadListV2Enabled ?? DEFAULT_MOBILE_PREFERENCES.threadListV2Enabled,
+    autoSettleAfterDays,
   };
 }
 

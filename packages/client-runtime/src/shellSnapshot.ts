@@ -19,6 +19,8 @@ export function toShellThread(thread: OrchestrationThread): OrchestrationThreadS
     createdAt: thread.createdAt,
     updatedAt: thread.updatedAt,
     archivedAt: thread.archivedAt,
+    settledOverride: thread.settledOverride,
+    settledAt: thread.settledAt,
     session: thread.session,
     latestUserMessageAt:
       [...thread.messages].reverse().find((message) => message.role === "user")?.createdAt ?? null,
