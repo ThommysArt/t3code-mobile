@@ -6,6 +6,8 @@ import { Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon } from "@/components/AppIcon";
+import { ConnectionStatusIndicator } from "@/components/ConnectionStatusIndicator";
+import { connectionStatusFromEnvironment } from "@/components/connectionStatus";
 import { BlurScreenRoot, HeaderBubble, HeaderSpacer } from "@/components/chrome";
 import { useChromeTheme } from "@/components/chrome/useChromeTheme";
 import { Screen } from "@/components/Screen";
@@ -58,7 +60,10 @@ export function WorkspaceScreen() {
   const environmentId = EnvironmentId.make(firstParam(params.environmentId));
   const threadId = ThreadId.make(firstParam(params.threadId));
   const { projects, getEnvironment } = useEnvironments();
-  const { shell, thread, connectionState } = useThread(environmentId, threadId);
+  const { shell, thread, connectionState, connectionStep, dataSource } = useThread(
+    environmentId,
+    threadId
+  );
   const { tabs, activeTabId, setActiveTabId, addTab, closeTab, selectTool } = useWorkspaceTabs({
     environmentId,
     threadId,
@@ -77,6 +82,15 @@ export function WorkspaceScreen() {
   const worktreePath = thread?.worktreePath ?? shell?.worktreePath ?? null;
   const live = connectionState === "ready";
   const environment = getEnvironment(environmentId);
+  const connectionStatus = useMemo(
+    () =>
+      connectionStatusFromEnvironment({
+        connectionState,
+        connectionStep,
+        dataSource,
+      }),
+    [connectionState, connectionStep, dataSource]
+  );
   const threadTitle = thread?.title ?? shell?.title ?? "Thread";
 
   const renderTabContent = (tab: WorkspaceTab) => {
@@ -153,7 +167,30 @@ export function WorkspaceScreen() {
             <HeaderBubble accessibilityLabel="Go back" onPress={() => router.back()} variant="icon">
               <AppIcon name="back" size={21} color={theme.foreground} />
             </HeaderBubble>
-            <HeaderBubble subtitle={environment?.connection.label ?? "Workspace"} title={threadTitle} variant="title" />
+            <HeaderBubble variant="title">
+              <View style={{ gap: 2, minWidth: 0 }}>
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    color: theme.foreground,
+                    fontSize: 15,
+                    fontWeight: "600",
+                    lineHeight: 17,
+                  }}
+                >
+                  {threadTitle}
+                </Text>
+                <View className="flex-row items-center gap-1.5" style={{ minWidth: 0 }}>
+                  <ConnectionStatusIndicator status={connectionStatus} compact />
+                  <Text
+                    numberOfLines={1}
+                    style={{ color: theme.muted, fontSize: 10, lineHeight: 12, flexShrink: 1 }}
+                  >
+                    · {environment?.connection.label ?? "Workspace"}
+                  </Text>
+                </View>
+              </View>
+            </HeaderBubble>
             <HeaderSpacer />
             <HeaderBubble accessibilityLabel="Add tab" onPress={addTab} variant="icon">
               <AppIcon name="plus" size={20} color={theme.foreground} />

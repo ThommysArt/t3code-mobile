@@ -1,6 +1,24 @@
 import type { ExpoConfig } from "expo/config";
+import type { WithAndroidWidgetsParams } from "react-native-android-widget";
 
 const packageJson = require("./package.json") as { readonly version: string };
+
+const androidWidgetConfig: WithAndroidWidgetsParams = {
+  widgets: [
+    {
+      name: "LatestThreads",
+      label: "Latest threads",
+      description: "Unsettled work first, then recent settled threads when under five.",
+      minWidth: "250dp",
+      minHeight: "180dp",
+      targetCellWidth: 4,
+      targetCellHeight: 3,
+      // Android enforces a 30-minute floor for automatic updates.
+      updatePeriodMillis: 30 * 60 * 1000,
+      previewImage: "./assets/widget-preview/latest-threads.png",
+    },
+  ],
+};
 
 const config: ExpoConfig = {
   name: "T3 Code Mobile",
@@ -15,6 +33,7 @@ const config: ExpoConfig = {
   ios: {
     supportsTablet: true,
     bundleIdentifier: "com.t3tools.t3code.mobile",
+    icon: "./assets/icon.png",
     infoPlist: {
       NSAppTransportSecurity: {
         NSAllowsArbitraryLoads: true,
@@ -27,17 +46,23 @@ const config: ExpoConfig = {
   android: {
     package: "com.t3tools.t3code.mobile",
     softwareKeyboardLayoutMode: "resize",
+    icon: "./assets/icon.png",
     adaptiveIcon: {
-      foregroundImage: "./assets/icon.png",
+      foregroundImage: "./assets/images/adaptive-icon.png",
       backgroundColor: "#09090b",
     },
     predictiveBackGestureEnabled: false,
+  },
+  web: {
+    favicon: "./assets/images/favicon.png",
   },
   plugins: [
     "expo-router",
     [
       "expo-notifications",
       {
+        // Monochrome status-bar glyph; keep color for the accent tint.
+        icon: "./assets/images/icon-192.png",
         color: "#0ea5e9",
         defaultChannel: "agent-events",
       },
@@ -75,6 +100,7 @@ const config: ExpoConfig = {
     ],
     "./plugins/withAndroidCleartextTraffic.cjs",
     "./plugins/withAndroidReleaseSigning.cjs",
+    ["react-native-android-widget", androidWidgetConfig],
   ],
   experiments: {
     typedRoutes: true,

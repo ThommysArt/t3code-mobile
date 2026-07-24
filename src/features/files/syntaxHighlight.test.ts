@@ -19,4 +19,12 @@ describe("highlightSource", () => {
     const lines = highlightSource("# Title", "markdown");
     expect(lines[0]?.[0]?.kind).toBe("keyword");
   });
+
+  it("highlights shell env assignments and common commands", () => {
+    const lines = highlightSource("APP_VARIANT=development pnpm android", "shell");
+    expect(lines[0]?.some((token) => token.kind === "property" && token.text === "APP_VARIANT")).toBe(
+      true
+    );
+    expect(lines[0]?.some((token) => token.kind === "string" && token.text === "pnpm")).toBe(true);
+  });
 });

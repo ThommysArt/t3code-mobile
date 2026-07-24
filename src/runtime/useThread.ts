@@ -108,7 +108,10 @@ export function useThread(environmentIdRaw: string, threadIdRaw: string) {
                 : current.error,
           }));
         }
-        logStatus("thread", "info", "No cached thread", threadId, { environmentId });
+        logStatus("thread", "info", "No cached thread", threadId, {
+          environmentId,
+          toast: false,
+        });
         return;
       }
 
@@ -117,7 +120,7 @@ export function useThread(environmentIdRaw: string, threadIdRaw: string) {
         "info",
         "Loaded cached thread",
         `${cached.thread.messages.length} messages`,
-        { environmentId }
+        { environmentId, toast: false }
       );
       snapshotSequenceRef.current = cached.snapshotSequence;
       setState((current) => {
@@ -143,7 +146,10 @@ export function useThread(environmentIdRaw: string, threadIdRaw: string) {
       isPending: current.data === null,
       error: null,
     }));
-    logStatus("thread", "info", "Subscribing to thread", threadId, { environmentId });
+    logStatus("thread", "info", "Subscribing to thread", threadId, {
+      environmentId,
+      toast: false,
+    });
     const unsubscribe = client.orchestration.subscribeThread(
       { threadId },
       (item) => {
@@ -153,7 +159,7 @@ export function useThread(environmentIdRaw: string, threadIdRaw: string) {
             "success",
             "Thread snapshot received",
             `${item.snapshot.thread.messages.length} messages (seq ${item.snapshot.snapshotSequence})`,
-            { environmentId }
+            { environmentId, toast: false }
           );
           persistThread(item.snapshot.thread, item.snapshot.snapshotSequence);
           setState({
@@ -363,6 +369,7 @@ export function useThread(environmentIdRaw: string, threadIdRaw: string) {
     clearSendError,
     refresh: () => reloadThreads(environmentId),
     connectionState: environment?.connectionState ?? "disconnected",
+    connectionStep: environment?.connectionStep ?? "offline",
     dataSource: environment?.dataSource ?? "none",
     serverConfig: environment?.serverConfig ?? null,
     httpBaseUrl: environment?.connection.httpBaseUrl ?? null,

@@ -9,7 +9,7 @@ import {
 } from "@t3tools/contracts";
 
 import { getSecureItem, setSecureItem } from "./secureStorage";
-import { setMinimalLoggingEnabled } from "./statusLog";
+import { setLessToastsEnabled } from "./statusLog";
 
 const PREFERENCES_KEY = "t3code.minimal.preferences";
 
@@ -18,8 +18,23 @@ export interface MobilePreferences {
   readonly confirmThreadArchive: boolean;
   readonly confirmThreadDelete: boolean;
   readonly sidebarThreadPreviewCount: SidebarThreadPreviewCount;
-  readonly minimalLogging: boolean;
+  /**
+   * Prefer ambient connection status (live indicator) over routine toasts.
+   * Major errors and source-control outcomes still toast. Default on.
+   * Stored key was previously `minimalLogging`; both are accepted when loading.
+   */
+  readonly lessToasts: boolean;
   readonly defaultThreadModelSelection: ModelSelection | null;
+  /**
+   * Device-local mirror of the web beta's `sidebarV2Enabled`. Mobile has no
+   * client-settings sync, so the flat v2 thread list is opted into per device.
+   */
+  readonly threadListV2Enabled: boolean;
+  /**
+   * Days of inactivity before auto-settle when Thread List v2 is on.
+   * `null` disables inactivity auto-settle (explicit settle + PR still apply).
+   */
+  readonly autoSettleAfterDays: number | null;
 }
 
 export const DEFAULT_MOBILE_PREFERENCES: MobilePreferences = {
@@ -27,8 +42,10 @@ export const DEFAULT_MOBILE_PREFERENCES: MobilePreferences = {
   confirmThreadArchive: DEFAULT_CLIENT_SETTINGS.confirmThreadArchive,
   confirmThreadDelete: DEFAULT_CLIENT_SETTINGS.confirmThreadDelete,
   sidebarThreadPreviewCount: DEFAULT_SIDEBAR_THREAD_PREVIEW_COUNT,
-  minimalLogging: false,
+  lessToasts: true,
   defaultThreadModelSelection: null,
+  threadListV2Enabled: false,
+  autoSettleAfterDays: DEFAULT_CLIENT_SETTINGS.sidebarAutoSettleAfterDays,
 };
 
 type PreferencesListener = () => void;
@@ -42,7 +59,7 @@ function clampThreadPreviewCount(value: number): SidebarThreadPreviewCount {
 }
 
 function normalizePreferences(
-  raw: Partial<MobilePreferences> | null | undefined
+  raw: (Partial<MobilePreferences> & { readonly minimalLogging?: boolean }) | null | undefined
 ): MobilePreferences {
   if (!raw) return DEFAULT_MOBILE_PREFERENCES;
 
@@ -53,6 +70,23 @@ function normalizePreferences(
       ? raw.timestampFormat
       : DEFAULT_MOBILE_PREFERENCES.timestampFormat;
 
+  const autoSettleAfterDays =
+    raw.autoSettleAfterDays === null
+      ? null
+      : typeof raw.autoSettleAfterDays === "number" &&
+          Number.isInteger(raw.autoSettleAfterDays) &&
+          raw.autoSettleAfterDays >= 1 &&
+          raw.autoSettleAfterDays <= 90
+        ? raw.autoSettleAfterDays
+        : DEFAULT_MOBILE_PREFERENCES.autoSettleAfterDays;
+
+  const lessToasts =
+    typeof raw.lessToasts === "boolean"
+      ? raw.lessToasts
+      : typeof raw.minimalLogging === "boolean"
+        ? raw.minimalLogging
+        : DEFAULT_MOBILE_PREFERENCES.lessToasts;
+
   return {
     timestampFormat,
     confirmThreadArchive:
@@ -62,8 +96,10 @@ function normalizePreferences(
       typeof raw.sidebarThreadPreviewCount === "number"
         ? clampThreadPreviewCount(raw.sidebarThreadPreviewCount)
         : DEFAULT_MOBILE_PREFERENCES.sidebarThreadPreviewCount,
-    minimalLogging: raw.minimalLogging ?? DEFAULT_MOBILE_PREFERENCES.minimalLogging,
+    lessToasts,
     defaultThreadModelSelection: normalizeModelSelection(raw.defaultThreadModelSelection),
+    threadListV2Enabled: raw.threadListV2Enabled ?? DEFAULT_MOBILE_PREFERENCES.threadListV2Enabled,
+    autoSettleAfterDays,
   };
 }
 
@@ -101,7 +137,7 @@ function normalizeModelSelection(value: unknown): ModelSelection | null {
 }
 
 function notifyListeners(): void {
-  setMinimalLoggingEnabled(cachedPreferences.minimalLogging);
+  setLessToastsEnabled(cachedPreferences.lessToasts);
   for (const listener of listeners) listener();
 }
 
@@ -121,17 +157,19 @@ export async function loadPreferences(): Promise<MobilePreferences> {
     const raw = await getSecureItem(PREFERENCES_KEY);
     if (!raw) {
       cachedPreferences = DEFAULT_MOBILE_PREFERENCES;
-      setMinimalLoggingEnabled(cachedPreferences.minimalLogging);
+      setLessToastsEnabled(cachedPreferences.lessToasts);
       return cachedPreferences;
     }
 
     try {
-      cachedPreferences = normalizePreferences(JSON.parse(raw) as Partial<MobilePreferences>);
-      setMinimalLoggingEnabled(cachedPreferences.minimalLogging);
+      cachedPreferences = normalizePreferences(
+        JSON.parse(raw) as Partial<MobilePreferences> & { readonly minimalLogging?: boolean }
+      );
+      setLessToastsEnabled(cachedPreferences.lessToasts);
       return cachedPreferences;
     } catch {
       cachedPreferences = DEFAULT_MOBILE_PREFERENCES;
-      setMinimalLoggingEnabled(cachedPreferences.minimalLogging);
+      setLessToastsEnabled(cachedPreferences.lessToasts);
       return cachedPreferences;
     } finally {
       loadPromise = null;

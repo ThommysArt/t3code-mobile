@@ -13,17 +13,6 @@ export interface SelectedImageAttachment {
   readonly upload: UploadChatAttachment;
 }
 
-export function messageImageUrl(httpBaseUrl: string | null, attachmentId: string): string | null {
-  if (!httpBaseUrl) return null;
-  return new URL(`/attachments/${encodeURIComponent(attachmentId)}`, httpBaseUrl).toString();
-}
-
-export function attachmentHeaders(
-  bearerToken: string | null
-): Readonly<Record<string, string>> | undefined {
-  return bearerToken ? { Authorization: `Bearer ${bearerToken}` } : undefined;
-}
-
 function extensionForMimeType(mimeType: string): string {
   if (mimeType.toLowerCase() === "image/png") return "png";
   if (mimeType.toLowerCase() === "image/webp") return "webp";

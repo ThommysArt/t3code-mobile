@@ -20,6 +20,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon } from "@/components/AppIcon";
+import { ConnectionStatusIndicator } from "@/components/ConnectionStatusIndicator";
+import { connectionStatusFromEnvironment } from "@/components/connectionStatus";
 import { BlurScreenRoot, HeaderBubble } from "@/components/chrome";
 import { useChromeTheme } from "@/components/chrome/useChromeTheme";
 import { FloatingBottomChrome } from "@/components/FloatingBottomChrome";
@@ -146,6 +148,15 @@ export function NewThreadScreen() {
       (candidate) => candidate.environmentId === environmentId && candidate.id === projectId
     ) ?? null;
   const environment = project ? getEnvironment(project.environmentId) : null;
+  const connectionStatus = useMemo(
+    () =>
+      connectionStatusFromEnvironment({
+        connectionState: environment?.connectionState ?? "disconnected",
+        connectionStep: environment?.connectionStep ?? "offline",
+        dataSource: environment?.dataSource ?? "none",
+      }),
+    [environment?.connectionState, environment?.connectionStep, environment?.dataSource]
+  );
   const { preferences } = usePreferences();
   const defaultThreadModelSelection = preferences.defaultThreadModelSelection;
   const { settings } = useServerSettings(project?.environmentId);
@@ -380,7 +391,30 @@ export function NewThreadScreen() {
             <HeaderBubble accessibilityLabel="Go back" onPress={() => router.back()} variant="icon">
               <AppIcon name="back" size={21} color={theme.foreground} />
             </HeaderBubble>
-            <HeaderBubble subtitle={project.title} title="New thread" variant="title" />
+            <HeaderBubble variant="title">
+              <View style={{ gap: 2, minWidth: 0 }}>
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    color: theme.foreground,
+                    fontSize: 15,
+                    fontWeight: "600",
+                    lineHeight: 17,
+                  }}
+                >
+                  New thread
+                </Text>
+                <View className="flex-row items-center gap-1.5" style={{ minWidth: 0 }}>
+                  <ConnectionStatusIndicator status={connectionStatus} compact />
+                  <Text
+                    numberOfLines={1}
+                    style={{ color: theme.muted, fontSize: 10, lineHeight: 12, flexShrink: 1 }}
+                  >
+                    · {project.title}
+                  </Text>
+                </View>
+              </View>
+            </HeaderBubble>
           </>
         }
         footer={

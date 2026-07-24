@@ -1,3 +1,4 @@
+import { canSettle, effectiveSettled } from "@t3tools/client-runtime";
 import type {
   ModelSelection,
   OrchestrationCheckpointSummary,
@@ -24,20 +25,24 @@ import type Reanimated from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppIcon } from "@/components/AppIcon";
+import { ConnectionStatusIndicator } from "@/components/ConnectionStatusIndicator";
+import { connectionStatusFromEnvironment } from "@/components/connectionStatus";
 import { BlurScreenRoot, HeaderBubble, HeaderSpacer } from "@/components/chrome";
 import { useChromeTheme } from "@/components/chrome/useChromeTheme";
 import { FloatingBottomChrome } from "@/components/FloatingBottomChrome";
 import { ProviderIcon } from "@/components/ProviderIcon";
 import { Screen } from "@/components/Screen";
+import { useThreadListActions } from "@/features/home/useThreadListActions";
 import { loadThreadDraft, saveThreadDraft } from "@/runtime/db";
+import { usePreferences } from "@/runtime/PreferencesProvider";
+import {
+  useAttachmentImageUri,
+  usePrefetchThreadAttachments,
+} from "@/runtime/useAttachmentImage";
 import { useThread } from "@/runtime/useThread";
 import { estimatedComposerChromeHeight } from "@/utils/bottomChrome";
 import { relativeTime } from "@/utils/time";
-import {
-  attachmentHeaders,
-  messageImageUrl,
-  type SelectedImageAttachment,
-} from "./messageAttachments";
+import { type SelectedImageAttachment } from "./messageAttachments";
 import { pickImageAttachments } from "./imageAttachmentPicker";
 import { MarkdownContent } from "./MarkdownContent";
 import { ModelSelectorDrawer, ThinkingOptionsDrawer } from "./ComposerSelectors";
@@ -66,12 +71,10 @@ function firstParam(value: string | string[] | undefined): string {
   return Array.isArray(value) ? (value[0] ?? "") : (value ?? "");
 }
 
-function MessageAttachment({
-  headers,
+function LocalMessageAttachment({
   name,
   uri,
 }: {
-  readonly headers: Readonly<Record<string, string>> | undefined;
   readonly name: string;
   readonly uri: string;
 }) {
@@ -91,7 +94,7 @@ function MessageAttachment({
         <>
           <Image
             accessibilityLabel={name}
-            source={{ uri, ...(headers ? { headers: { ...headers } } : {}) }}
+            source={{ uri }}
             cachePolicy="memory-disk"
             contentFit="cover"
             transition={150}
@@ -112,6 +115,73 @@ function MessageAttachment({
             </View>
           ) : null}
         </>
+      )}
+    </View>
+  );
+}
+
+function ServerMessageAttachment({
+  attachmentId,
+  environmentId,
+  name,
+}: {
+  readonly attachmentId: string;
+  readonly environmentId: string;
+  readonly name: string;
+}) {
+  const { uri, cacheKey, isLoading: resolving } = useAttachmentImageUri(
+    environmentId,
+    attachmentId
+  );
+  const [failed, setFailed] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setFailed(false);
+    setLoading(true);
+  }, [uri]);
+
+  return (
+    <View
+      className="mb-2.5 w-full overflow-hidden rounded-2xl bg-surface-secondary"
+      style={{ aspectRatio: 1.3 }}
+    >
+      {failed || (!resolving && !uri) ? (
+        <View className="flex-1 items-center justify-center gap-2 px-4">
+          <Text className="text-center text-xs text-muted">Unable to load {name}</Text>
+        </View>
+      ) : uri ? (
+        <>
+          <Image
+            accessibilityLabel={name}
+            source={{
+              uri,
+              ...(cacheKey ? { cacheKey } : {}),
+            }}
+            cachePolicy="memory-disk"
+            contentFit="cover"
+            transition={150}
+            style={{ height: "100%", width: "100%" }}
+            onLoadStart={() => {
+              setFailed(false);
+              setLoading(true);
+            }}
+            onLoad={() => setLoading(false)}
+            onError={() => {
+              setFailed(true);
+              setLoading(false);
+            }}
+          />
+          {loading || resolving ? (
+            <View className="absolute inset-0 items-center justify-center">
+              <ActivityIndicator color="#2563eb" />
+            </View>
+          ) : null}
+        </>
+      ) : (
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator color="#2563eb" />
+        </View>
       )}
     </View>
   );
@@ -152,12 +222,10 @@ function ComposerImageAttachment({
 }
 
 function MessageRow({
-  bearerToken,
-  httpBaseUrl,
+  environmentId,
   message,
 }: {
-  readonly bearerToken: string | null;
-  readonly httpBaseUrl: string | null;
+  readonly environmentId: string;
   readonly message: OrchestrationMessage & {
     readonly optimistic?: true;
     readonly localImageAttachments?: readonly { readonly name: string; readonly uri: string }[];
@@ -174,7 +242,6 @@ function MessageRow({
   if (!message.text.trim() && attachments.length === 0 && localImageAttachments.length === 0) {
     return null;
   }
-  const headers = attachmentHeaders(bearerToken);
   const copyMessage = () => {
     const text = message.text.trim();
     if (!text) return;
@@ -192,25 +259,20 @@ function MessageRow({
         }
       >
         {localImageAttachments.map((attachment) => (
-          <MessageAttachment
+          <LocalMessageAttachment
             key={attachment.uri}
-            headers={undefined}
             name={attachment.name}
             uri={attachment.uri}
           />
         ))}
-        {attachments.map((attachment) => {
-          const uri = messageImageUrl(httpBaseUrl, attachment.id);
-          if (!uri) return null;
-          return (
-            <MessageAttachment
-              key={attachment.id}
-              headers={headers}
-              name={attachment.name}
-              uri={uri}
-            />
-          );
-        })}
+        {attachments.map((attachment) => (
+          <ServerMessageAttachment
+            key={attachment.id}
+            attachmentId={attachment.id}
+            environmentId={environmentId}
+            name={attachment.name}
+          />
+        ))}
         {message.text.trim() ? (
           <>
             <View
@@ -269,22 +331,19 @@ function MessageRow({
 }
 
 function AssistantMessageRow({
-  bearerToken,
   checkpoint,
-  httpBaseUrl,
+  environmentId,
   message,
   showMeta,
 }: {
-  readonly bearerToken: string | null;
   readonly checkpoint: OrchestrationCheckpointSummary | null;
-  readonly httpBaseUrl: string | null;
+  readonly environmentId: string;
   readonly message: OrchestrationMessage;
   readonly showMeta: boolean;
 }) {
   const isDark = useColorScheme() === "dark";
   const [copied, setCopied] = useState(false);
   const attachments = message.attachments ?? [];
-  const headers = attachmentHeaders(bearerToken);
   const text = message.text.trim();
 
   if (text.length === 0 && attachments.length === 0) {
@@ -302,18 +361,14 @@ function AssistantMessageRow({
   return (
     <View className={showMeta ? "mb-5 px-1" : "mb-2 px-1"}>
       {text ? <MarkdownContent text={message.text} /> : null}
-      {attachments.map((attachment) => {
-        const uri = messageImageUrl(httpBaseUrl, attachment.id);
-        if (!uri) return null;
-        return (
-          <MessageAttachment
-            key={attachment.id}
-            headers={headers}
-            name={attachment.name}
-            uri={uri}
-          />
-        );
-      })}
+      {attachments.map((attachment) => (
+        <ServerMessageAttachment
+          key={attachment.id}
+          attachmentId={attachment.id}
+          environmentId={environmentId}
+          name={attachment.name}
+        />
+      ))}
       {checkpoint ? <AssistantChangedFiles checkpoint={checkpoint} /> : null}
       {showMeta ? (
         <View className="mt-1 flex-row items-center gap-2">
@@ -340,12 +395,11 @@ function AssistantMessageRow({
 }
 
 function FeedEntryRow({
-  bearerToken,
   checkpointByAssistantMessageId,
   copiedWorkRowId,
   entry,
+  environmentId,
   expandedWorkRows,
-  httpBaseUrl,
   terminalAssistantMessageIds,
   unsettledTurnId,
   onCopyWorkRow,
@@ -353,15 +407,14 @@ function FeedEntryRow({
   onToggleWorkGroup,
   onToggleWorkRow,
 }: {
-  readonly bearerToken: string | null;
   readonly checkpointByAssistantMessageId: ReadonlyMap<
     OrchestrationMessage["id"],
     OrchestrationCheckpointSummary
   >;
   readonly copiedWorkRowId: string | null;
   readonly entry: ThreadFeedEntry;
+  readonly environmentId: string;
   readonly expandedWorkRows: Readonly<Record<string, boolean>>;
-  readonly httpBaseUrl: string | null;
   readonly terminalAssistantMessageIds: ReadonlySet<string>;
   readonly unsettledTurnId: TurnId | null;
   readonly onCopyWorkRow: (rowId: string, value: string) => void;
@@ -404,9 +457,7 @@ function FeedEntryRow({
   if (entry.type === "message") {
     const { message } = entry;
     if (message.role === "user") {
-      return (
-        <MessageRow bearerToken={bearerToken} httpBaseUrl={httpBaseUrl} message={message} />
-      );
+      return <MessageRow environmentId={environmentId} message={message} />;
     }
 
     const assistantTurnStillInProgress =
@@ -420,9 +471,8 @@ function FeedEntryRow({
 
     return (
       <AssistantMessageRow
-        bearerToken={bearerToken}
         checkpoint={checkpointByAssistantMessageId.get(message.id) ?? null}
-        httpBaseUrl={httpBaseUrl}
+        environmentId={environmentId}
         message={message}
         showMeta={showMeta}
       />
@@ -454,10 +504,9 @@ export function ThreadScreen() {
     cachedReceivedAt,
     clearSendError,
     connectionState,
+    connectionStep,
     dataSource,
     error,
-    bearerToken,
-    httpBaseUrl,
     isCached,
     isPending,
     interruptTurn,
@@ -470,6 +519,9 @@ export function ThreadScreen() {
     thread,
     updateModelSelection,
   } = useThread(environmentId, threadId);
+  usePrefetchThreadAttachments(environmentId, messages);
+  const { preferences } = usePreferences();
+  const { settleThread, unsettleThread, environmentSupportsSettlement } = useThreadListActions();
   const [draft, setDraft] = useState("");
   const [selectedAttachments, setSelectedAttachments] = useState<
     readonly SelectedImageAttachment[]
@@ -545,8 +597,16 @@ export function ThreadScreen() {
   const busy = thread?.session?.status === "running" || thread?.session?.status === "starting";
   const live = connectionState === "ready";
   const canSend = Boolean(thread && (draft.trim() || selectedAttachments.length > 0));
-  const statusLabel = live ? "Live" : dataSource === "http" ? "HTTP sync" : "Offline";
-  const statusColor = live ? "#22c55e" : dataSource === "http" ? "#f59e0b" : "#737373";
+  const connectionStatus = useMemo(
+    () =>
+      connectionStatusFromEnvironment({
+        connectionState,
+        connectionStep,
+        dataSource,
+      }),
+    [connectionState, connectionStep, dataSource]
+  );
+  const statusColor = connectionStatus.color;
   const effectiveModel = selectedModel ?? thread?.modelSelection ?? shell?.modelSelection ?? null;
   const allModelOptions = useMemo(
     () => (effectiveModel ? buildModelOptions(serverConfig, effectiveModel) : []),
@@ -687,7 +747,6 @@ export function ThreadScreen() {
           : option.selection;
       setSelectedModel(nextSelection);
       setModelError(null);
-      setModelSelectorOpen(false);
       void updateModelSelection(nextSelection).catch((selectionError: unknown) => {
         setModelError(
           selectionError instanceof Error ? selectionError.message : "Unable to update the model."
@@ -746,7 +805,24 @@ export function ThreadScreen() {
   }, []);
 
   const threadTitle = thread?.title ?? shell?.title ?? "Thread";
-  const threadSubtitle = `${statusLabel} · ${thread?.branch ?? shell?.branch ?? "main"}`;
+  const branchLabel = thread?.branch ?? shell?.branch ?? "main";
+  const settlementSupported =
+    shell != null && environmentSupportsSettlement(shell.environmentId);
+  const nowIso = new Date().toISOString();
+  const threadIsSettled =
+    shell != null &&
+    settlementSupported &&
+    effectiveSettled(shell, {
+      now: nowIso,
+      autoSettleAfterDays: preferences.autoSettleAfterDays,
+    });
+  const canSettleThread =
+    shell != null && settlementSupported && !threadIsSettled && canSettle(shell, { now: nowIso });
+  const showSettleAction =
+    preferences.threadListV2Enabled &&
+    shell != null &&
+    settlementSupported &&
+    (threadIsSettled || canSettleThread);
 
   return (
     <Screen edges={["left", "right"]}>
@@ -757,8 +833,48 @@ export function ThreadScreen() {
             <HeaderBubble accessibilityLabel="Go back" onPress={() => router.back()} variant="icon">
               <AppIcon name="back" size={21} color={theme.foreground} />
             </HeaderBubble>
-            <HeaderBubble subtitle={threadSubtitle} title={threadTitle} variant="title" />
+            <HeaderBubble variant="title">
+              <View style={{ gap: 2, minWidth: 0 }}>
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    color: theme.foreground,
+                    fontSize: 15,
+                    fontWeight: "600",
+                    lineHeight: 17,
+                  }}
+                >
+                  {threadTitle}
+                </Text>
+                <View className="flex-row items-center gap-1.5" style={{ minWidth: 0 }}>
+                  <ConnectionStatusIndicator status={connectionStatus} compact />
+                  <Text
+                    numberOfLines={1}
+                    style={{ color: theme.muted, fontSize: 10, lineHeight: 12, flexShrink: 1 }}
+                  >
+                    · {branchLabel}
+                  </Text>
+                </View>
+              </View>
+            </HeaderBubble>
             <HeaderSpacer />
+            {showSettleAction ? (
+              <HeaderBubble
+                accessibilityLabel={threadIsSettled ? "Un-settle thread" : "Settle thread"}
+                onPress={() => {
+                  if (!shell) return;
+                  if (threadIsSettled) void unsettleThread(shell);
+                  else void settleThread(shell);
+                }}
+                variant="icon"
+              >
+                <AppIcon
+                  name={threadIsSettled ? "refresh" : "check"}
+                  size={20}
+                  color={theme.foreground}
+                />
+              </HeaderBubble>
+            ) : null}
             <HeaderBubble
               accessibilityLabel="Open source control"
               onPress={() =>
@@ -955,12 +1071,11 @@ export function ThreadScreen() {
           {feed.map((entry) => (
             <FeedEntryRow
               key={entry.id}
-              bearerToken={bearerToken}
               checkpointByAssistantMessageId={checkpointByAssistantMessageId}
               copiedWorkRowId={copiedWorkRowId}
               entry={entry}
+              environmentId={environmentId}
               expandedWorkRows={expandedWorkRows}
-              httpBaseUrl={httpBaseUrl}
               terminalAssistantMessageIds={terminalAssistantMessageIds}
               unsettledTurnId={unsettledTurnId}
               onCopyWorkRow={copyWorkRow}
@@ -971,25 +1086,21 @@ export function ThreadScreen() {
           ))}
         </KeyboardChatScrollView>
       </BlurScreenRoot>
-      {effectiveModel ? (
-        <ModelSelectorDrawer
-          lockedProvider={hasExistingConversation}
-          options={modelOptions}
-          selected={effectiveModel}
-          visible={modelSelectorOpen}
-          onClose={() => setModelSelectorOpen(false)}
-          onSelect={selectModel}
-        />
-      ) : null}
-      {effectiveModel && thinkingDescriptors.length > 0 ? (
-        <ThinkingOptionsDrawer
-          descriptors={thinkingDescriptors}
-          selection={effectiveModel}
-          visible={thinkingSelectorOpen}
-          onClose={() => setThinkingSelectorOpen(false)}
-          onSelect={selectThinkingOption}
-        />
-      ) : null}
+      <ModelSelectorDrawer
+        lockedProvider={hasExistingConversation}
+        options={modelOptions}
+        selected={effectiveModel}
+        visible={modelSelectorOpen && effectiveModel != null}
+        onClose={() => setModelSelectorOpen(false)}
+        onSelect={selectModel}
+      />
+      <ThinkingOptionsDrawer
+        descriptors={thinkingDescriptors}
+        selection={effectiveModel}
+        visible={thinkingSelectorOpen && effectiveModel != null && thinkingDescriptors.length > 0}
+        onClose={() => setThinkingSelectorOpen(false)}
+        onSelect={selectThinkingOption}
+      />
     </Screen>
   );
 }

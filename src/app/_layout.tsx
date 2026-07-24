@@ -16,18 +16,18 @@ import { AgentNotifications } from "@/runtime/AgentNotifications";
 import { appAtomRegistry } from "@/runtime/atom-registry";
 import { EnvironmentProvider } from "@/runtime/EnvironmentProvider";
 import { PreferencesProvider } from "@/runtime/PreferencesProvider";
-import { enableGeistTextPolyfill, geistFontMap } from "@/theme/geist";
+import { appFontMap, enableAppTextPolyfill } from "@/theme/fonts";
 
 SplashScreen.preventAutoHideAsync().catch(() => {
   // Splash may already be hidden in some environments.
 });
 
-enableGeistTextPolyfill();
+enableAppTextPolyfill();
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const backgroundColor = colorScheme === "dark" ? "#090909" : "#f4f4f5";
-  const [fontsLoaded, fontError] = useFonts(geistFontMap);
+  const [fontsLoaded, fontError] = useFonts(appFontMap);
 
   useEffect(() => {
     if (fontsLoaded || fontError) {
@@ -43,23 +43,25 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1, backgroundColor }}>
       <SafeAreaProvider>
         <KeyboardProvider>
-          <HeroUINativeProvider
-            config={{
-              toast: {
-                defaultProps: {
-                  placement: "top",
-                  isSwipeable: true,
-                },
-                insets: {
-                  left: 12,
-                  right: 12,
-                },
-              },
-            }}
-          >
-            <PreferencesProvider>
-              <RegistryContext.Provider value={appAtomRegistry}>
-                <EnvironmentProvider>
+          {/* EnvironmentProvider must wrap HeroUINativeProvider so portaled
+              surfaces (BottomSheet, dialogs) still see connection context. */}
+          <PreferencesProvider>
+            <RegistryContext.Provider value={appAtomRegistry}>
+              <EnvironmentProvider>
+                <HeroUINativeProvider
+                  config={{
+                    toast: {
+                      defaultProps: {
+                        placement: "top",
+                        isSwipeable: true,
+                      },
+                      insets: {
+                        left: 12,
+                        right: 12,
+                      },
+                    },
+                  }}
+                >
                   <View style={{ flex: 1, position: "relative" }}>
                     <AgentNotifications />
                     <StatusToastBridge />
@@ -68,10 +70,10 @@ export default function RootLayout() {
                       screenOptions={{ headerShown: false, contentStyle: { backgroundColor } }}
                     />
                   </View>
-                </EnvironmentProvider>
-              </RegistryContext.Provider>
-            </PreferencesProvider>
-          </HeroUINativeProvider>
+                </HeroUINativeProvider>
+              </EnvironmentProvider>
+            </RegistryContext.Provider>
+          </PreferencesProvider>
         </KeyboardProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

@@ -22,7 +22,7 @@ export function StatusLogPanel({ limit = 12 }: { readonly limit?: number }) {
   const visible = events.filter(shouldShowStatusInPanel).slice(-limit).reverse();
 
   return (
-    <View className="overflow-hidden rounded-3xl border border-separator bg-surface">
+    <View className="overflow-hidden rounded-2xl border border-separator bg-surface">
       <View className="flex-row items-center justify-between border-b border-separator px-4 py-3">
         <View>
           <Text className="text-sm font-semibold text-foreground">Recent activity</Text>

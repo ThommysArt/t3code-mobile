@@ -1,14 +1,20 @@
 import { compactProviderError } from "../utils/providerErrors";
 
-let minimalLoggingEnabled = false;
+/** When true (default), connection/sync noise stays ambient; only major/user actions toast. */
+let lessToastsEnabled = true;
 
-export function setMinimalLoggingEnabled(enabled: boolean): void {
-  minimalLoggingEnabled = enabled;
+export function setLessToastsEnabled(enabled: boolean): void {
+  lessToastsEnabled = enabled;
 }
 
-export function isMinimalLoggingEnabled(): boolean {
-  return minimalLoggingEnabled;
+export function isLessToastsEnabled(): boolean {
+  return lessToastsEnabled;
 }
+
+/** @deprecated Use setLessToastsEnabled */
+export const setMinimalLoggingEnabled = setLessToastsEnabled;
+/** @deprecated Use isLessToastsEnabled */
+export const isMinimalLoggingEnabled = isLessToastsEnabled;
 
 export type StatusLevel = "info" | "success" | "warning" | "danger";
 
@@ -91,19 +97,36 @@ export function clearStatusHistory(): void {
   for (const listener of historyListeners) listener();
 }
 
-export function shouldShowStatusToast(event: Pick<StatusEvent, "level" | "phase" | "persistent" | "toast">): boolean {
+/**
+ * Toast policy controlled by the "Less toasts" preference (default on).
+ *
+ * Less toasts on: connection/sync stays ambient (live indicator). Keep major errors,
+ * source-control outcomes, and events that explicitly set `toast: true`.
+ * Less toasts off: verbose — show everything except `toast: false`.
+ */
+export function shouldShowStatusToast(
+  event: Pick<StatusEvent, "level" | "phase" | "scope" | "persistent" | "toast">
+): boolean {
   if (event.toast === false) return false;
-  if (!isMinimalLoggingEnabled()) return true;
-  if (event.persistent) return true;
-  if (event.level === "danger") return true;
-  if (event.level === "warning" && (event.phase === "error" || event.phase === "disconnected")) {
+  if (event.toast === true) return true;
+
+  if (!isLessToastsEnabled()) {
     return true;
   }
+
+  // Major errors always surface.
+  if (event.level === "danger") return true;
+
+  // Source-control outcomes are infrequent and user-initiated.
+  if (event.scope === "git" && (event.level === "success" || event.level === "warning")) {
+    return true;
+  }
+
   return false;
 }
 
 export function shouldShowStatusInPanel(event: Pick<StatusEvent, "level" | "phase" | "persistent">): boolean {
-  if (!isMinimalLoggingEnabled()) return true;
+  if (!isLessToastsEnabled()) return true;
   if (event.persistent) return true;
   if (event.level === "danger" || event.level === "warning") return true;
   if (event.phase === "error" || event.phase === "disconnected") return true;

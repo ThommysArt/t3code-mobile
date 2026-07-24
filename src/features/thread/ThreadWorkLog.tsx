@@ -2,6 +2,7 @@ import type { OrchestrationCheckpointSummary } from "@t3tools/contracts";
 import { useColorScheme, Pressable, ScrollView, Text, View } from "react-native";
 
 import { AppIcon, type AppIconName } from "@/components/AppIcon";
+import { ChangedFilesCard } from "./ChangedFilesCard";
 import type { ThreadFeedActivity } from "./threadActivity";
 
 function stripShellWrapper(value: string): string {
@@ -220,38 +221,6 @@ export function AssistantChangedFiles({
 }: {
   readonly checkpoint: OrchestrationCheckpointSummary;
 }) {
-  const files = checkpoint.files;
-  if (files.length === 0) return null;
-  const additions = files.reduce((total, file) => total + file.additions, 0);
-  const deletions = files.reduce((total, file) => total + file.deletions, 0);
-
-  return (
-    <View className="mt-2 px-0.5">
-      <Text className="text-[10px] font-bold uppercase tracking-[0.8px] text-muted">
-        Changed files ({files.length}) · +{additions} · -{deletions}
-      </Text>
-      <View className="mt-1">
-        {files.slice(0, 8).map((file) => {
-          const normalizedPath = file.path.replaceAll("\\", "/");
-          const lastSlash = normalizedPath.lastIndexOf("/");
-          const directory = lastSlash >= 0 ? normalizedPath.slice(0, lastSlash + 1) : "";
-          const name = lastSlash >= 0 ? normalizedPath.slice(lastSlash + 1) : normalizedPath;
-          return (
-            <View key={file.path} className="flex-row items-center gap-2 py-1">
-              <AppIcon name="file" size={12} color="#737373" strokeWidth={2} />
-              <Text className="min-w-0 flex-1 text-[11px] text-muted" numberOfLines={1}>
-                {directory}
-                <Text className="font-semibold text-foreground">{name}</Text>
-              </Text>
-              <Text className="text-[10px] font-semibold text-success">+{file.additions}</Text>
-              <Text className="text-[10px] font-semibold text-danger">-{file.deletions}</Text>
-            </View>
-          );
-        })}
-        {files.length > 8 ? (
-          <Text className="py-1 text-[11px] text-muted">+{files.length - 8} more files</Text>
-        ) : null}
-      </View>
-    </View>
-  );
+  if (checkpoint.files.length === 0) return null;
+  return <ChangedFilesCard files={checkpoint.files} />;
 }

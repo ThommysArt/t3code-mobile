@@ -22,6 +22,8 @@ export function SettingsHubScreen() {
       <SettingsScroll>
         <SettingsSection title="General">
           <SettingsNavRow label="General" href="/settings/general" />
+          <SettingsDivider />
+          <SettingsNavRow label="Beta" href="/settings/beta" />
         </SettingsSection>
 
         <SettingsSection title="Configuration">

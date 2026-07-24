@@ -231,15 +231,53 @@ function pushPlain(tokens: SyntaxToken[], text: string): void {
   tokens.push({ text, kind: "plain" });
 }
 
+const SHELL_COMMANDS = new Set([
+  "pnpm",
+  "npm",
+  "yarn",
+  "bun",
+  "npx",
+  "node",
+  "git",
+  "cd",
+  "ls",
+  "cat",
+  "echo",
+  "export",
+  "source",
+  "curl",
+  "wget",
+  "mkdir",
+  "rm",
+  "cp",
+  "mv",
+  "chmod",
+  "sudo",
+  "brew",
+  "docker",
+  "kubectl",
+  "make",
+  "cargo",
+  "go",
+  "python",
+  "pip",
+  "expo",
+  "adb",
+  "xcodebuild",
+  "gradle",
+  "pod",
+]);
+
 function tokenizeCodeLine(line: string, language: SyntaxLanguage): readonly SyntaxToken[] {
   const keywords = KEYWORDS_BY_LANGUAGE[language];
   const tokens: SyntaxToken[] = [];
   let index = 0;
+  const isShell = language === "shell";
 
   while (index < line.length) {
     const rest = line.slice(index);
 
-    const commentMatch = /^(\/\/.*|#.*)/.exec(rest);
+    const commentMatch = isShell ? /^(#.*)/.exec(rest) : /^(\/\/.*|#.*)/.exec(rest);
     if (commentMatch) {
       tokens.push({ text: commentMatch[1] ?? "", kind: "comment" });
       break;
@@ -252,7 +290,17 @@ function tokenizeCodeLine(line: string, language: SyntaxLanguage): readonly Synt
       continue;
     }
 
-    const numberMatch = /^(\b\d+(?:\.\d+)?\b)/.exec(rest);
+    if (isShell) {
+      const envAssign = /^([A-Za-z_][A-Za-z0-9_]*)(=)/.exec(rest);
+      if (envAssign) {
+        tokens.push({ text: envAssign[1] ?? "", kind: "property" });
+        tokens.push({ text: envAssign[2] ?? "", kind: "punctuation" });
+        index += envAssign[0].length;
+        continue;
+      }
+    }
+
+    const numberMatch = /^(\d+(?:\.\d+)?)\b/.exec(rest);
     if (numberMatch) {
       tokens.push({ text: numberMatch[1] ?? "", kind: "number" });
       index += numberMatch[1]?.length ?? 0;
@@ -264,6 +312,8 @@ function tokenizeCodeLine(line: string, language: SyntaxLanguage): readonly Synt
       const word = wordMatch[1] ?? "";
       if (keywords?.has(word)) {
         tokens.push({ text: word, kind: "keyword" });
+      } else if (isShell && SHELL_COMMANDS.has(word)) {
+        tokens.push({ text: word, kind: "string" });
       } else if (/^[A-Z]/.test(word)) {
         tokens.push({ text: word, kind: "type" });
       } else {

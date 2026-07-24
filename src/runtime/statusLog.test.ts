@@ -6,13 +6,14 @@ import {
   getStatusHistory,
   logStatus,
   sanitizeStatusText,
-  setMinimalLoggingEnabled,
+  setLessToastsEnabled,
   shouldShowStatusToast,
 } from "./statusLog";
 
 describe("status logging", () => {
   afterEach(() => {
     clearStatusHistory();
+    setLessToastsEnabled(true);
     vi.restoreAllMocks();
   });
 
@@ -36,28 +37,100 @@ describe("status logging", () => {
     ).toBe("You've reached your usage limit with OpenAI Codex. Try again at 10:38 PM.");
   });
 
-  it("filters routine toasts when minimal logging is enabled", () => {
-    setMinimalLoggingEnabled(true);
+  it("with less toasts on, keeps connection lifecycle ambient and only surfaces important toasts", () => {
+    setLessToastsEnabled(true);
     expect(
       shouldShowStatusToast({
         level: "info",
-        toast: true,
+        phase: "connecting",
+        scope: "environment",
+      })
+    ).toBe(false);
+    expect(
+      shouldShowStatusToast({
+        level: "success",
+        phase: "connected",
+        scope: "environment",
+        persistent: true,
+      })
+    ).toBe(false);
+    expect(
+      shouldShowStatusToast({
+        level: "info",
+        phase: "syncing",
+        scope: "shell",
+        persistent: true,
+      })
+    ).toBe(false);
+    expect(
+      shouldShowStatusToast({
+        level: "info",
+        scope: "thread",
+      })
+    ).toBe(false);
+    expect(
+      shouldShowStatusToast({
+        level: "warning",
+        phase: "disconnected",
+        scope: "environment",
       })
     ).toBe(false);
     expect(
       shouldShowStatusToast({
         level: "danger",
-        toast: true,
+        scope: "thread",
       })
     ).toBe(true);
     expect(
       shouldShowStatusToast({
-        level: "warning",
-        phase: "disconnected",
-        toast: true,
+        level: "success",
+        scope: "git",
       })
     ).toBe(true);
-    setMinimalLoggingEnabled(false);
+    expect(
+      shouldShowStatusToast({
+        level: "info",
+        toast: true,
+        scope: "environment",
+      })
+    ).toBe(true);
+  });
+
+  it("with less toasts off, shows verbose status toasts", () => {
+    setLessToastsEnabled(false);
+    expect(
+      shouldShowStatusToast({
+        level: "info",
+        phase: "connecting",
+        scope: "environment",
+      })
+    ).toBe(true);
+    expect(
+      shouldShowStatusToast({
+        level: "success",
+        phase: "connected",
+        scope: "environment",
+      })
+    ).toBe(true);
+    expect(
+      shouldShowStatusToast({
+        level: "info",
+        scope: "thread",
+      })
+    ).toBe(true);
+    expect(
+      shouldShowStatusToast({
+        level: "info",
+        toast: false,
+        scope: "thread",
+      })
+    ).toBe(false);
+    expect(
+      shouldShowStatusToast({
+        level: "danger",
+        scope: "thread",
+      })
+    ).toBe(true);
   });
 
   it("keeps a structured bounded history", () => {

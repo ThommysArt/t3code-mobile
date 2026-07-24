@@ -67,6 +67,8 @@ import {
   normalizeWsBaseUrl,
   shouldUseHttpForHost,
 } from "@/utils/network";
+import { syncLatestThreadsWidget } from "@/features/widget/syncLatestThreadsWidget";
+import { getPreferences } from "./preferences";
 
 const HTTP_REQUEST_TIMEOUT_MS = 30_000;
 const CONNECTION_PROBE_TIMEOUT_MS = 8_000;
@@ -340,7 +342,6 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
           environmentId: savedConnection.environmentId,
           phase: "syncing",
           inProgress: true,
-          persistent: true,
         });
       }
       updateEnvironment(savedConnection.environmentId, (current) => ({
@@ -401,8 +402,8 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
               ? "connected"
               : "disconnected",
           inProgress: false,
-          persistent: !options?.quiet,
-          toast: !options?.quiet,
+          // Quiet HTTP complete stays ambient even with less toasts off.
+          toast: options?.quiet ? false : undefined,
         }
       );
       return readModel;
@@ -502,7 +503,6 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
         `${savedConnection.label} (${savedConnection.displayUrl})`,
         {
           environmentId,
-          persistent: true,
           phase: "connecting",
           inProgress: true,
         }
@@ -571,9 +571,10 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
           message,
           {
             environmentId,
-            persistent: true,
             phase: "disconnected",
             inProgress: false,
+            // Re-pair needs user action even with less toasts on.
+            ...(authFailed ? { toast: true as const } : {}),
           }
         );
         if (authFailed) {
@@ -759,7 +760,6 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
             `${activeThreadCount} visible threads, ${snapshot.projects.length} projects`,
             {
               environmentId: eventEnvironmentId,
-              persistent: true,
               phase: "connected",
               inProgress: false,
             }
@@ -816,7 +816,6 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
         }));
         logStatus("environment", "success", "Connected", savedConnection.label, {
           environmentId,
-          persistent: true,
           phase: "connected",
           inProgress: false,
         });
@@ -870,7 +869,6 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
             : message,
           {
             environmentId,
-            persistent: true,
             phase: readModel ? "disconnected" : "error",
             inProgress: false,
           }
@@ -900,7 +898,9 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
     const pollTimers = httpPollTimersRef.current;
     const pollDeadlines = httpPollDeadlinesRef.current;
 
-    logStatus("app", "info", "Starting app", "Loading saved connections and local cache");
+    logStatus("app", "info", "Starting app", "Loading saved connections and local cache", {
+      toast: false,
+    });
     void Promise.all([loadConnections(), loadAllCachedShellSnapshots()])
       .then(async ([connections, cachedSnapshots]) => {
         if (cancelled) return;
@@ -1195,7 +1195,6 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
         } catch (error) {
           logStatus("shell", "danger", "Thread refresh failed", formatRemoteError(error), {
             environmentId: connection.environmentId,
-            persistent: true,
             phase: "error",
             inProgress: false,
           });
@@ -1240,6 +1239,7 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
         environmentId,
         phase: "syncing",
         inProgress: true,
+        toast: false,
       });
       const result = await effectRuntime.runPromise(
         dispatchRemoteOrchestrationCommand({
@@ -1252,6 +1252,7 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
       startHttpPolling(savedConnection);
       logStatus("thread", "success", "Prompt accepted over HTTP", `Sequence ${result.sequence}`, {
         environmentId,
+        toast: false,
       });
       return result;
     },
@@ -1292,6 +1293,35 @@ export function EnvironmentProvider({ children }: PropsWithChildren) {
   );
   const projects = catalog.projects;
   const threads = catalog.threads;
+
+  // Keep the Android home-screen widget in sync with the live catalog.
+  useEffect(() => {
+    if (isBootstrapping) return;
+    const timeout = setTimeout(() => {
+      const projectTitleByKey = new Map<string, string>();
+      for (const project of projects) {
+        projectTitleByKey.set(`${project.environmentId}:${project.id}`, project.title);
+      }
+      const settlementEnvironmentIds = new Set<EnvironmentId>();
+      let hasKnownCapabilities = false;
+      for (const environment of environments) {
+        if (!environment.serverConfig) continue;
+        hasKnownCapabilities = true;
+        if (environment.serverConfig.environment.capabilities.threadSettlement === true) {
+          settlementEnvironmentIds.add(environment.connection.environmentId);
+        }
+      }
+      void syncLatestThreadsWidget({
+        threads,
+        projectTitleByKey,
+        // Omit the set until at least one serverConfig is known so cached
+        // settlement fields still classify correctly offline.
+        settlementEnvironmentIds: hasKnownCapabilities ? settlementEnvironmentIds : undefined,
+        autoSettleAfterDays: getPreferences().autoSettleAfterDays,
+      });
+    }, 750);
+    return () => clearTimeout(timeout);
+  }, [environments, isBootstrapping, projects, threads]);
 
   const getEnvironment = useCallback(
     (environmentId: EnvironmentId) => environmentById[environmentId] ?? null,
